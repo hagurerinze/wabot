@@ -11,6 +11,7 @@
   "description": "",
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "better-sqlite3": "^11.10.0",
     "pino": "^10.4.0"
   },
   "type": "module"
