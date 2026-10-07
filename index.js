@@ -4,8 +4,12 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
 } from '@whiskeysockets/baileys'
 import pino from 'pino'
+import os from 'os'
+import fs from 'fs'
+import { execSync } from 'child_process'
 
 const PHONE = process.env.BOT_NUMBER
+const OWNER = process.env.OWNER_ID // diisi setelah tahu ID kamu
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
@@ -50,11 +54,37 @@ async function start() {
       m.message.extendedTextMessage?.text ||
       ''
     const jid = m.key.remoteJid
+    const sender = m.key.participant || m.key.remoteJid
+    console.log('dari:', sender, '| isi:', text)
+    const isOwner = OWNER && sender === OWNER
+
+    const reply = (t) => sock.sendMessage(jid, { text: t }, { quoted: m })
 
     if (text === '!ping') {
-      await sock.sendMessage(jid, { text: 'pong' }, { quoted: m })
+      await reply('pong')
     } else if (text === '!help') {
-      await sock.sendMessage(jid, { text: 'Command:\n!ping\n!help' }, { quoted: m })
+      await reply('Command:\n!ping\n!help\n!uptime\n!sysinfo (owner)')
+    } else if (text === '!uptime') {
+      const s = Math.floor(os.uptime())
+      const h = Math.floor(s / 3600)
+      const mnt = Math.floor((s % 3600) / 60)
+      await reply(`Laptop nyala: ${h} jam ${mnt} menit`)
+    } else if (text === '!sysinfo') {
+      if (!isOwner) return reply('Command ini khusus owner.')
+      const meminfo = fs.readFileSync('/proc/meminfo', 'utf8')
+      const get = (k) => Number(meminfo.match(new RegExp(k + ':\\s+(\\d+)'))[1]) / 1024
+      const total = get('MemTotal')
+      const avail = get('MemAvailable')
+      let temp = '-'
+      try {
+        temp = Number(fs.readFileSync('/sys/class/thermal/thermal_zone0/temp', 'utf8')) / 1000 + ' C'
+      } catch {}
+      const disk = execSync("df -h / | awk 'NR==2{print $3\"/\"$2\" (\"$5\")\"}'").toString().trim()
+      const load = os.loadavg().map((x) => x.toFixed(2)).join(' ')
+      await reply(
+        `RAM: ${(total - avail).toFixed(0)}/${total.toFixed(0)} MB\n` +
+        `Load: ${load}\nSuhu: ${temp}\nDisk /: ${disk}`
+      )
     }
   })
 }
