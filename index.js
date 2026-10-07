@@ -7,9 +7,11 @@ import pino from 'pino'
 import os from 'os'
 import fs from 'fs'
 import { execSync } from 'child_process'
+import { saveMessage, getHistory, clearHistory } from './db.js'
+import { askGemini } from './ai.js'
 
 const PHONE = process.env.BOT_NUMBER
-const OWNER = process.env.OWNER_ID // diisi setelah tahu ID kamu
+const OWNER = process.env.OWNER_ID
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
@@ -63,7 +65,10 @@ async function start() {
     if (text === '!ping') {
       await reply('pong')
     } else if (text === '!help') {
-      await reply('Command:\n!ping\n!help\n!uptime\n!sysinfo (owner)')
+      await reply(
+        'Command:\n!ping\n!help\n!uptime\n!sysinfo (owner)\n' +
+        '!history\n!reset\n!ai <pertanyaan> (owner)'
+      )
     } else if (text === '!uptime') {
       const s = Math.floor(os.uptime())
       const h = Math.floor(s / 3600)
@@ -85,6 +90,26 @@ async function start() {
         `RAM: ${(total - avail).toFixed(0)}/${total.toFixed(0)} MB\n` +
         `Load: ${load}\nSuhu: ${temp}\nDisk /: ${disk}`
       )
+    } else if (text === '!history') {
+      const h = getHistory(jid, 5)
+      await reply(h.length ? h.map((x) => `${x.role}: ${x.content}`).join('\n') : 'Belum ada riwayat.')
+    } else if (text === '!reset') {
+      clearHistory(jid)
+      await reply('Riwayat chat ini dihapus.')
+    } else if (text.startsWith('!ai ')) {
+      if (!isOwner) return reply('Fitur AI sementara khusus owner.')
+      const q = text.slice(4).trim()
+      if (!q) return reply('Contoh: !ai apa itu Debian?')
+      try {
+        const history = [...getHistory(jid, 9), { role: 'user', content: q }]
+        const answer = await askGemini(history)
+        saveMessage(jid, 'user', q)
+        saveMessage(jid, 'model', answer)
+        await reply(answer)
+      } catch (e) {
+        console.error(e)
+        await reply('AI lagi error, coba lagi nanti.')
+      }
     }
   })
 }
