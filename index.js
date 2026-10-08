@@ -91,9 +91,11 @@ async function start() {
         `Load: ${load}\nSuhu: ${temp}\nDisk /: ${disk}`
       )
     } else if (text === '!history') {
+      if (jid.endsWith('@g.us') && !isOwner) return reply('Di grup, command ini khusus owner.')
       const h = getHistory(jid, 5)
       await reply(h.length ? h.map((x) => `${x.role}: ${x.content}`).join('\n') : 'Belum ada riwayat.')
     } else if (text === '!reset') {
+      if (jid.endsWith('@g.us') && !isOwner) return reply('Di grup, command ini khusus owner.')
       clearHistory(jid)
       await reply('Riwayat chat ini dihapus.')
     } else if (text.startsWith('!ai ')) {
