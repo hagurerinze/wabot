@@ -58,3 +58,7 @@ The bot prints the sender ID in the terminal.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
   Do not send spam or bulk messages.
+
+## License
+
+MIT. See the LICENSE file.
