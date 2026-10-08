@@ -7,7 +7,8 @@ import makeWASocket, {
 import pino from 'pino'
 import os from 'os'
 import fs from 'fs'
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
+import path from 'path'
 import { saveMessage, getHistory, clearHistory } from './db.js'
 import { askGemini } from './ai.js'
 
@@ -100,6 +101,30 @@ async function start() {
       if (jid.endsWith('@g.us') && !isOwner) return reply('Di grup, command ini khusus owner.')
       clearHistory(jid)
       await reply('Riwayat chat ini dihapus.')
+    } else if (text === '!sticker') {
+      if (!isOwner) return reply('Fitur ini sementara khusus owner.')
+      if (!m.message.imageMessage) return reply('Kirim gambar dengan caption !sticker')
+      const inFile = path.join(os.tmpdir(), `st-${Date.now()}.jpg`)
+      const outFile = path.join(os.tmpdir(), `st-${Date.now()}.webp`)
+      try {
+        const buf = await downloadMediaMessage(m, 'buffer', {}, {
+          logger: pino({ level: 'silent' }),
+          reuploadRequest: sock.updateMediaMessage,
+        })
+        fs.writeFileSync(inFile, buf)
+        execFileSync('ffmpeg', [
+          '-y', '-i', inFile,
+          '-vf', 'scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
+          '-c:v', 'libwebp', '-quality', '70', '-an', outFile,
+        ], { stdio: 'ignore', timeout: 20000 })
+        await sock.sendMessage(jid, { sticker: fs.readFileSync(outFile) }, { quoted: m })
+      } catch (e) {
+        console.error(e)
+        await reply('Gagal membuat stiker.')
+      } finally {
+        fs.rmSync(inFile, { force: true })
+        fs.rmSync(outFile, { force: true })
+      }
     } else if (text.startsWith('!ai ')) {
       if (!isOwner) return reply('Fitur AI sementara khusus owner.')
       const q = text.slice(4).trim()
