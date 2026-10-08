@@ -60,7 +60,7 @@ async function start() {
       ''
     const jid = m.key.remoteJid
     const sender = m.key.participant || m.key.remoteJid
-    console.log('dari:', sender, '| isi:', text)
+    if (text.startsWith('!')) console.log('cmd:', text.split(' ')[0], '| dari:', sender)
     const isOwner = OWNER && sender === OWNER
 
     const reply = (t) => sock.sendMessage(jid, { text: t }, { quoted: m })
