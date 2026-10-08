@@ -2,6 +2,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys'
 import pino from 'pino'
 import os from 'os'
@@ -54,6 +55,7 @@ async function start() {
     const text =
       m.message.conversation ||
       m.message.extendedTextMessage?.text ||
+      m.message.imageMessage?.caption ||
       ''
     const jid = m.key.remoteJid
     const sender = m.key.participant || m.key.remoteJid
@@ -103,9 +105,22 @@ async function start() {
       const q = text.slice(4).trim()
       if (!q) return reply('Contoh: !ai apa itu Debian?')
       try {
-        const history = [...getHistory(jid, 9), { role: 'user', content: q }]
-        const answer = await askGemini(history)
-        saveMessage(jid, 'user', q)
+        let image
+        if (m.message.imageMessage) {
+          const buf = await downloadMediaMessage(m, 'buffer', {}, {
+            logger: pino({ level: 'silent' }),
+            reuploadRequest: sock.updateMediaMessage,
+          })
+          if (buf.length > 4 * 1024 * 1024) return reply('Gambar terlalu besar (maks 4 MB).')
+          image = {
+            mime: m.message.imageMessage.mimetype || 'image/jpeg',
+            data: buf.toString('base64'),
+          }
+        }
+        const stored = image ? `[gambar] ${q}` : q
+        const history = [...getHistory(jid, 9), { role: 'user', content: stored }]
+        const answer = await askGemini(history, image)
+        saveMessage(jid, 'user', stored)
         saveMessage(jid, 'model', answer)
         await reply(answer)
       } catch (e) {

@@ -34,7 +34,7 @@ async function callModel(model, body) {
   return text || 'AI tidak memberi jawaban.'
 }
 
-export async function askGemini(history) {
+export async function askGemini(history, image) {
   // history: [{ role: 'user' | 'model', content }]
   const contents = history.map((h) => ({
     role: h.role,
@@ -42,6 +42,10 @@ export async function askGemini(history) {
   }))
   // Gemini harus mulai dari pesan user
   while (contents.length && contents[0].role !== 'user') contents.shift()
+  if (image) {
+    const last = contents[contents.length - 1]
+    last.parts.push({ inlineData: { mimeType: image.mime, data: image.data } })
+  }
 
   const body = { systemInstruction: { parts: [{ text: SYSTEM }] }, contents }
 
