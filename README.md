@@ -12,6 +12,7 @@ It uses Baileys, Node.js, SQLite, and the Gemini API.
 - `!ai <question>` - ask Gemini (owner only)
   - Send a photo with the caption `!ai <question>` to ask about the photo
 - `!sticker` - send a photo with this caption to get a sticker (owner only)
+- `!img <description>` - make a picture with Cloudflare Workers AI (owner only)
 - `!history` and `!reset` - show or clear the chat memory
   - In a group, only the owner can use them
 - Chat memory is saved per chat in SQLite
@@ -22,6 +23,7 @@ It uses Baileys, Node.js, SQLite, and the Gemini API.
 - `ffmpeg` (for stickers): `sudo apt install ffmpeg`
 - A spare WhatsApp number for the bot
 - A Gemini API key from Google AI Studio
+- A free Cloudflare account (for `!img`)
 
 ## Setup
 
@@ -38,6 +40,8 @@ BOT_NUMBER=628xxxxxxxxxx
 OWNER_ID=your_id@lid
 GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-3.5-flash-lite,gemini-3.1-flash-lite
+CF_ACCOUNT_ID=your_cloudflare_account_id
+CF_API_TOKEN=your_cloudflare_token
 ```
 
 `GEMINI_MODEL` can have many models, separated by commas.
