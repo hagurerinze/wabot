@@ -11,9 +11,11 @@ import { execSync, execFileSync } from 'child_process'
 import path from 'path'
 import { saveMessage, getHistory, clearHistory } from './db.js'
 import { askGemini } from './ai.js'
+import { generateImage } from './img.js'
 
 const PHONE = process.env.BOT_NUMBER
 const OWNER = process.env.OWNER_ID
+let lastImg = 0
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
@@ -124,6 +126,25 @@ async function start() {
       } finally {
         fs.rmSync(inFile, { force: true })
         fs.rmSync(outFile, { force: true })
+      }
+    } else if (text.startsWith('!img ')) {
+      if (!isOwner) return reply('Fitur ini sementara khusus owner.')
+      const prompt = text.slice(5).trim()
+      if (!prompt) return reply('Contoh: !img kucing astronot di bulan')
+      if (prompt.length > 300) return reply('Deskripsi terlalu panjang (maks 300 huruf).')
+      const wait = 20000 - (Date.now() - lastImg)
+      if (wait > 0) return reply(`Tunggu ${Math.ceil(wait / 1000)} detik lagi.`)
+      lastImg = Date.now()
+      try {
+        const img = await generateImage(prompt)
+        await sock.sendMessage(jid, { image: img, caption: prompt }, { quoted: m })
+      } catch (e) {
+        console.error(e.message)
+        if (e.message.includes('429')) {
+          await reply('Jatah gambar gratis hari ini habis, coba lagi besok.')
+        } else {
+          await reply('Gagal membuat gambar, coba lagi nanti.')
+        }
       }
     } else if (text.startsWith('!ai ')) {
       if (!isOwner) return reply('Fitur AI sementara khusus owner.')
