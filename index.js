@@ -3,6 +3,7 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
+  jidNormalizedUser,
 } from '@whiskeysockets/baileys'
 import pino from 'pino'
 import os from 'os'
@@ -55,11 +56,21 @@ async function start() {
     const m = messages[0]
     if (!m.message || m.key.fromMe) return
 
-    const text =
+    let text =
       m.message.conversation ||
       m.message.extendedTextMessage?.text ||
       m.message.imageMessage?.caption ||
       ''
+    const ctx =
+      m.message.extendedTextMessage?.contextInfo ||
+      m.message.imageMessage?.contextInfo
+    const mentioned = (ctx?.mentionedJid || []).map(jidNormalizedUser)
+    const me = [sock.user?.id, sock.user?.lid].filter(Boolean).map(jidNormalizedUser)
+    const isMentioned = mentioned.some((j) => me.includes(j))
+    if (mentioned.length) console.log('mention:', mentioned, 'bot:', me)
+    if (isMentioned && !text.startsWith('!')) {
+      text = '!ai ' + text.replace(/@\d+/g, '').trim()
+    }
     const jid = m.key.remoteJid
     const sender = m.key.participant || m.key.remoteJid
     if (text.startsWith('!')) console.log('cmd:', text.split(' ')[0], '| dari:', sender)
