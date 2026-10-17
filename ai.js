@@ -1,12 +1,20 @@
+import fs from 'fs'
 const KEY = process.env.GEMINI_API_KEY
 const MODELS = (process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
 
-const SYSTEM =
-  'Kamu adalah bot WhatsApp yang ramah. Jawab singkat dan jelas, ' +
-  'pakai bahasa yang sama dengan pengguna.'
+const FALLBACK = 'Kamu adalah bot WhatsApp yang ramah. Jawab singkat dan jelas.'
+
+function getPersona() {
+  try {
+    return fs.readFileSync(new URL('./persona.md', import.meta.url), 'utf8')
+  } catch (e) {
+    console.error('persona.md tidak terbaca:', e.message)
+    return FALLBACK
+  }
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -47,7 +55,7 @@ export async function askGemini(history, image) {
     last.parts.push({ inlineData: { mimeType: image.mime, data: image.data } })
   }
 
-  const body = { systemInstruction: { parts: [{ text: SYSTEM }] }, contents }
+  const body = { systemInstruction: { parts: [{ text: getPersona() }] }, contents }
 
   let lastErr
   for (const model of MODELS) {
