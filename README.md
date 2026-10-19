@@ -1,21 +1,46 @@
 # wabot
 
 A small WhatsApp bot that runs on my low-spec Debian laptop.
-It uses Baileys, Node.js, SQLite, and the Gemini API.
+The bot is a character named Yurishy.
+It uses Baileys, Node.js, SQLite, the Gemini API, and Cloudflare Workers AI.
 
-## Features
+## Commands
+
+Everyone can use these:
 
 - `!ping` - check if the bot is alive
 - `!help` - show the command list
 - `!uptime` - how long the laptop has been on
-- `!sysinfo` - RAM, load, temperature, disk (owner only)
-- `!ai <question>` - ask Gemini (owner only)
-  - Send a photo with the caption `!ai <question>` to ask about the photo
-- `!sticker` - send a photo with this caption to get a sticker (owner only)
-- `!img <description>` - make a picture with Cloudflare Workers AI (owner only)
-- `!history` and `!reset` - show or clear the chat memory
-  - In a group, only the owner can use them
-- Chat memory is saved per chat in SQLite
+- `!ai <question>` - ask Yurishy (you can send a photo with this caption)
+- `!sticker` - send a photo with this caption to get a sticker
+- `!history` - show your last chat messages
+- `!reset` - delete your chat memory
+
+In a group, you can also tag the bot number and write a message.
+It works the same as `!ai`, but you do not need to type the command.
+
+Only the owner can use these:
+
+- `!sysinfo` - RAM, load, temperature, disk
+- `!img <description>` - make a picture with Cloudflare Workers AI
+
+## Limits
+
+The owner has no limit. Other people have these limits:
+
+- `!ai`: 5 per minute and 50 per day for each person
+- `!ai`: 300 per day for everyone together
+- `!sticker`: 3 per minute for each person, and one sticker at a time
+
+## How it works
+
+- Chat memory is saved in SQLite.
+  In a group, each person has their own memory.
+- Yurishy calls people by their WhatsApp name.
+- Yurishy's personality is in `persona.md`.
+  When you change this file, the change works at once. You do not need to restart.
+- If the first Gemini model fails, the bot tries the next model.
+- Yurishy says honestly that she is a bot if someone asks seriously.
 
 ## Requirements
 
@@ -23,7 +48,7 @@ It uses Baileys, Node.js, SQLite, and the Gemini API.
 - `ffmpeg` (for stickers): `sudo apt install ffmpeg`
 - A spare WhatsApp number for the bot
 - A Gemini API key from Google AI Studio
-- A free Cloudflare account (for `!img`)
+- A free Cloudflare account (only for `!img`)
 
 ## Setup
 
@@ -42,11 +67,13 @@ GEMINI_API_KEY=your_key
 GEMINI_MODEL=gemini-3.5-flash-lite,gemini-3.1-flash-lite
 CF_ACCOUNT_ID=your_cloudflare_account_id
 CF_API_TOKEN=your_cloudflare_token
+BLOCKED=
 ```
 
-`GEMINI_MODEL` can have many models, separated by commas.
-If the first model fails, the bot tries the next one.
-Model names change often, so check the list in Google AI Studio.
+- `GEMINI_MODEL` can have many models, separated by commas.
+  Model names change often, so check the list in Google AI Studio.
+- `BLOCKED` is a list of sender IDs the bot will ignore, separated by commas.
+  You can leave it empty.
 
 ## Run
 
@@ -80,7 +107,7 @@ Restart=on-failure
 RestartSec=5
 ```
 
-Then add these aliases to `~/.bashrc`:
+Then add these lines to `~/.bashrc`:
 
 ```bash
 alias boton='systemctl --user start wabot'
@@ -88,20 +115,31 @@ alias botoff='systemctl --user stop wabot'
 alias botrestart='systemctl --user restart wabot'
 alias botstatus='systemctl --user status wabot --no-pager'
 alias botlog='journalctl --user -u wabot -f'
+botchats() { (cd ~/wabot && node chats.js "$@"); }
+botchat() { (cd ~/wabot && node --env-file=.env chat.js); }
 ```
 
-Run `systemctl --user daemon-reload` once.
+Run `systemctl --user daemon-reload` one time.
 After you change the code or `.env`, use `botrestart`.
 
-## Safety
+## Terminal tools
 
+- `botchats` - list all saved chats
+- `botchats <part of id> [number]` - show the last messages of one chat
+- `botchat` - talk to Yurishy in the terminal
+
+The bot only saves `!ai` chats. It does not save normal WhatsApp messages.
+
+## Privacy and safety
+
+- Messages for `!ai` are sent to the Gemini API and saved on the owner's laptop.
+  `!reset` deletes your own chat memory.
+- The bot logs only command names and tag IDs, not the full text of messages.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
-  Do not send spam or bulk messages.
-- The bot only logs command names, not the full text of messages.
+  The bot only answers commands and tags. Do not use it for spam or bulk messages.
 
 ## License
 
 MIT. See the LICENSE file.
-
