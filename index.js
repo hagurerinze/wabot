@@ -8,15 +8,41 @@ import makeWASocket, {
 import pino from 'pino'
 import os from 'os'
 import fs from 'fs'
-import { execSync, execFileSync } from 'child_process'
 import path from 'path'
+import { execSync, execFile } from 'child_process'
+import { promisify } from 'util'
 import { saveMessage, getHistory, clearHistory } from './db.js'
 import { askGemini } from './ai.js'
 import { generateImage } from './img.js'
 
+const execFileAsync = promisify(execFile)
+
 const PHONE = process.env.BOT_NUMBER
 const OWNER = process.env.OWNER_ID
+const BLOCKED = (process.env.BLOCKED || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 let lastImg = 0
+let stickerBusy = false
+const hits = new Map()
+
+// true = boleh, false = kena batas
+function allow(key, max, windowMs) {
+  const now = Date.now()
+  const arr = (hits.get(key) || []).filter((t) => now - t < windowMs)
+  if (arr.length >= max) {
+    hits.set(key, arr)
+    return false
+  }
+  arr.push(now)
+  hits.set(key, arr)
+  return true
+}
+
+const cleanName = (n) =>
+  (n || '').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 24)
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
@@ -61,6 +87,7 @@ async function start() {
       m.message.extendedTextMessage?.text ||
       m.message.imageMessage?.caption ||
       ''
+
     const ctx =
       m.message.extendedTextMessage?.contextInfo ||
       m.message.imageMessage?.contextInfo
@@ -71,10 +98,14 @@ async function start() {
     if (isMentioned && !text.startsWith('!')) {
       text = '!ai ' + text.replace(/@\d+/g, '').trim()
     }
+
     const jid = m.key.remoteJid
     const sender = m.key.participant || m.key.remoteJid
+    if (BLOCKED.includes(sender)) return
     if (text.startsWith('!')) console.log('cmd:', text.split(' ')[0], '| dari:', sender)
     const isOwner = OWNER && sender === OWNER
+    // di grup, riwayat dipisah per orang
+    const key = jid.endsWith('@g.us') ? `${jid}|${sender}` : jid
 
     const reply = (t) => sock.sendMessage(jid, { text: t }, { quoted: m })
 
@@ -82,8 +113,9 @@ async function start() {
       await reply('pong')
     } else if (text === '!help') {
       await reply(
-        'Command:\n!ping\n!help\n!uptime\n!sysinfo (owner)\n' +
-        '!history\n!reset\n!ai <pertanyaan> (owner)'
+        'Command:\n!ping\n!help\n!uptime\n!ai <pertanyaan> (bisa kirim gambar)\n' +
+        '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n\n' +
+        'Pesan !ai dikirim ke Gemini dan disimpan di laptop owner. !reset menghapus riwayatmu.'
       )
     } else if (text === '!uptime') {
       const s = Math.floor(os.uptime())
@@ -107,34 +139,39 @@ async function start() {
         `Load: ${load}\nSuhu: ${temp}\nDisk /: ${disk}`
       )
     } else if (text === '!history') {
-      if (jid.endsWith('@g.us') && !isOwner) return reply('Di grup, command ini khusus owner.')
-      const h = getHistory(jid, 5)
+      const h = getHistory(key, 5)
       await reply(h.length ? h.map((x) => `${x.role}: ${x.content}`).join('\n') : 'Belum ada riwayat.')
     } else if (text === '!reset') {
-      if (jid.endsWith('@g.us') && !isOwner) return reply('Di grup, command ini khusus owner.')
-      clearHistory(jid)
-      await reply('Riwayat chat ini dihapus.')
+      clearHistory(key)
+      await reply('Riwayat kamu dihapus.')
     } else if (text === '!sticker') {
-      if (!isOwner) return reply('Fitur ini sementara khusus owner.')
       if (!m.message.imageMessage) return reply('Kirim gambar dengan caption !sticker')
-      const inFile = path.join(os.tmpdir(), `st-${Date.now()}.jpg`)
-      const outFile = path.join(os.tmpdir(), `st-${Date.now()}.webp`)
+      if (!isOwner && !allow(`st:${sender}`, 3, 60000)) {
+        return reply('Pelan-pelan, tunggu sebentar ya.')
+      }
+      if (stickerBusy) return reply('Lagi membuat stiker lain, coba lagi sebentar.')
+      stickerBusy = true
+      const id = Date.now()
+      const inFile = path.join(os.tmpdir(), `st-${id}.jpg`)
+      const outFile = path.join(os.tmpdir(), `st-${id}.webp`)
       try {
         const buf = await downloadMediaMessage(m, 'buffer', {}, {
           logger: pino({ level: 'silent' }),
           reuploadRequest: sock.updateMediaMessage,
         })
+        if (buf.length > 5 * 1024 * 1024) return reply('Gambar terlalu besar (maks 5 MB).')
         fs.writeFileSync(inFile, buf)
-        execFileSync('ffmpeg', [
+        await execFileAsync('ffmpeg', [
           '-y', '-i', inFile,
           '-vf', 'scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000',
           '-c:v', 'libwebp', '-quality', '70', '-an', outFile,
-        ], { stdio: 'ignore', timeout: 20000 })
+        ], { timeout: 20000 })
         await sock.sendMessage(jid, { sticker: fs.readFileSync(outFile) }, { quoted: m })
       } catch (e) {
-        console.error(e)
+        console.error(e.message)
         await reply('Gagal membuat stiker.')
       } finally {
+        stickerBusy = false
         fs.rmSync(inFile, { force: true })
         fs.rmSync(outFile, { force: true })
       }
@@ -158,9 +195,14 @@ async function start() {
         }
       }
     } else if (text.startsWith('!ai ')) {
-      if (!isOwner) return reply('Fitur AI sementara khusus owner.')
+      if (!isOwner) {
+        if (!allow(`ai:${sender}`, 5, 60000)) return reply('Pelan-pelan, tunggu sebentar ya.')
+        if (!allow(`aid:${sender}`, 50, 86400000)) return reply('Jatah AI-mu hari ini habis, coba lagi besok.')
+        if (!allow('ai:all', 300, 86400000)) return reply('Jatah AI hari ini habis untuk semua orang, coba lagi besok.')
+      }
       const q = text.slice(4).trim()
       if (!q) return reply('Contoh: !ai apa itu Debian?')
+      const who = isOwner ? 'Hagure (pemilikmu)' : cleanName(m.pushName) || 'tidak diketahui'
       try {
         let image
         if (m.message.imageMessage) {
@@ -175,13 +217,13 @@ async function start() {
           }
         }
         const stored = image ? `[gambar] ${q}` : q
-        const history = [...getHistory(jid, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image)
-        saveMessage(jid, 'user', stored)
-        saveMessage(jid, 'model', answer)
+        const history = [...getHistory(key, 9), { role: 'user', content: stored }]
+        const answer = await askGemini(history, image, who)
+        saveMessage(key, 'user', stored)
+        saveMessage(key, 'model', answer)
         await reply(answer)
       } catch (e) {
-        console.error(e)
+        console.error(e.message)
         await reply('AI lagi error, coba lagi nanti.')
       }
     }
