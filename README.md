@@ -2,7 +2,7 @@
 
 A small WhatsApp bot that runs on my low-spec Debian laptop.
 The bot is a character named Yurishy.
-It uses Baileys, Node.js, SQLite, the Gemini API, and Cloudflare Workers AI.
+It uses Baileys, Node.js, SQLite, Groq, the Gemini API, and Cloudflare Workers AI.
 
 ## Commands
 
@@ -32,6 +32,15 @@ The owner has no limit. Other people have these limits:
 - `!ai`: 300 per day for everyone together
 - `!sticker`: 3 per minute for each person, and one sticker at a time
 
+## How the AI works
+
+- The bot tries the models in `AI_CHAIN`, from the first to the last.
+  If one model is slow, full, or has an error, the bot tries the next one.
+- My main choice is Groq because it is fast. Gemini is the backup.
+- Messages with a photo go to Gemini, because the Groq models I use only read text.
+- The bot gives up after about 25 seconds in total.
+- The bot logs which model answered and how long it took. It does not log the message text.
+
 ## How it works
 
 - Chat memory is saved in SQLite.
@@ -39,7 +48,6 @@ The owner has no limit. Other people have these limits:
 - Yurishy calls people by their WhatsApp name.
 - Yurishy's personality is in `persona.md`.
   When you change this file, the change works at once. You do not need to restart.
-- If the first Gemini model fails, the bot tries the next model.
 - Yurishy says honestly that she is a bot if someone asks seriously.
 
 ## Requirements
@@ -47,7 +55,8 @@ The owner has no limit. Other people have these limits:
 - Debian (or another Linux) and Node.js 20 or newer
 - `ffmpeg` (for stickers): `sudo apt install ffmpeg`
 - A spare WhatsApp number for the bot
-- A Gemini API key from Google AI Studio
+- A free Groq API key (main AI)
+- A Gemini API key from Google AI Studio (backup AI and photos)
 - A free Cloudflare account (only for `!img`)
 
 ## Setup
@@ -63,15 +72,17 @@ Create a file named `.env`:
 ```
 BOT_NUMBER=628xxxxxxxxxx
 OWNER_ID=your_id@lid
-GEMINI_API_KEY=your_key
-GEMINI_MODEL=gemini-3.5-flash-lite,gemini-3.1-flash-lite
+GROQ_API_KEY=your_groq_key
+GEMINI_API_KEY=your_gemini_key
+AI_CHAIN=groq:openai/gpt-oss-120b,groq:openai/gpt-oss-20b,gemini:gemini-3.5-flash-lite,gemini:gemini-3.1-flash-lite
 CF_ACCOUNT_ID=your_cloudflare_account_id
 CF_API_TOKEN=your_cloudflare_token
 BLOCKED=
 ```
 
-- `GEMINI_MODEL` can have many models, separated by commas.
-  Model names change often, so check the list in Google AI Studio.
+- `AI_CHAIN` is a list of `provider:model`, separated by commas.
+  The first one is tried first. Model names change often, so check the lists
+  on the Groq console and in Google AI Studio from time to time.
 - `BLOCKED` is a list of sender IDs the bot will ignore, separated by commas.
   You can leave it empty.
 
@@ -132,9 +143,11 @@ The bot only saves `!ai` chats. It does not save normal WhatsApp messages.
 
 ## Privacy and safety
 
-- Messages for `!ai` are sent to the Gemini API and saved on the owner's laptop.
+- Messages for `!ai` are sent to Groq or Gemini, and they are saved on the owner's laptop.
   `!reset` deletes your own chat memory.
-- The bot logs only command names and tag IDs, not the full text of messages.
+- The free plans of AI services can change their rules and limits at any time.
+  Read their current terms before you use this bot for other people.
+- The bot logs only command names, tag IDs, and the AI model name, not the full text of messages.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
