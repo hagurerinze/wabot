@@ -69,3 +69,31 @@ export function getSummary(chat) {
 export function saveSummary(chat, summary) {
   putSum.run(chat, summary, Date.now())
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person TEXT NOT NULL,
+    fact TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    UNIQUE(person, fact)
+  );
+`)
+const getFactsStmt = db.prepare('SELECT fact FROM facts WHERE person = ? ORDER BY id DESC LIMIT ?')
+const addFactStmt = db.prepare('INSERT OR IGNORE INTO facts (person, fact, ts) VALUES (?, ?, ?)')
+const trimFactsStmt = db.prepare(
+  'DELETE FROM facts WHERE person = ? AND id NOT IN ' +
+  '(SELECT id FROM facts WHERE person = ? ORDER BY id DESC LIMIT ?)'
+)
+const delFactsStmt = db.prepare('DELETE FROM facts WHERE person = ?')
+
+export function getFacts(person, limit = 25) {
+  return getFactsStmt.all(person, limit).map((r) => r.fact).reverse()
+}
+export function addFacts(person, facts) {
+  for (const f of facts) addFactStmt.run(person, f, Date.now())
+  trimFactsStmt.run(person, person, 25)
+}
+export function deleteFacts(person) {
+  delFactsStmt.run(person)
+}

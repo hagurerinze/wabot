@@ -11,8 +11,8 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary } from './db.js'
-import { askGemini, summarizeChat } from './ai.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts } from './db.js'
+import { askGemini, summarizeChat, extractFacts } from './ai.js'
 import { generateImage } from './img.js'
 
 const execFileAsync = promisify(execFile)
@@ -47,7 +47,7 @@ const cleanName = (n) =>
 const SUMMARY_MAX = 30
 const SUMMARY_KEEP = 10
 const compacting = new Set()
-async function compactChat(key) {
+async function compactChat(key, person) {
   if (compacting.has(key)) return
   if (countMessages(key) <= SUMMARY_MAX) return
   compacting.add(key)
@@ -55,6 +55,11 @@ async function compactChat(key) {
     const old = getOldest(key, countMessages(key) - SUMMARY_KEEP)
     const summary = await summarizeChat(getSummary(key), old)
     saveSummary(key, summary)
+    try {
+      addFacts(person, await extractFacts(getFacts(person), old))
+    } catch (e) {
+      console.error('fakta gagal:', e.message)
+    }
     deleteMessages(old.map((x) => x.id))
     console.log('summary: updated,', old.length, 'messages')
   } catch (e) {
@@ -142,9 +147,12 @@ async function start() {
     } else if (text === '!help') {
       await reply(
         'Command:\n!ping\n!help\n!uptime\n!ai <pertanyaan> (bisa kirim gambar)\n' +
-        '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n\n' +
+        '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n!forget (hapus fakta tentangmu)\n\n' +
         'Pesan !ai dikirim ke Gemini dan disimpan di laptop owner. !reset menghapus riwayatmu.'
       )
+    } else if (text === '!forget') {
+      deleteFacts(sender)
+      await reply('Oke, fakta tentangmu sudah kuhapus.')
     } else if (text === '!uptime') {
       const s = Math.floor(os.uptime())
       const h = Math.floor(s / 3600)
@@ -251,11 +259,11 @@ async function start() {
           : ''
         const stored = image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image, who, getSummary(key))
+        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender))
         saveMessage(key, 'user', stored)
         saveMessage(key, 'model', answer)
         await reply(answer)
-        compactChat(key)
+        compactChat(key, sender)
       } catch (e) {
         console.error(e.message)
         await reply('AI lagi error, coba lagi nanti.')
