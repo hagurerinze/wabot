@@ -95,7 +95,11 @@ async function start() {
     const me = [sock.user?.id, sock.user?.lid].filter(Boolean).map(jidNormalizedUser)
     const isMentioned = mentioned.some((j) => me.includes(j))
     if (mentioned.length) console.log('mention:', mentioned, 'bot:', me)
-    if (isMentioned && !text.startsWith('!')) {
+    // reply ke pesan bot dan chat pribadi juga dianggap !ai
+    const quotedFrom = ctx?.participant ? jidNormalizedUser(ctx.participant) : ''
+    const isReplyToBot = !!quotedFrom && me.includes(quotedFrom)
+    const isDM = /@(s\.whatsapp\.net|lid)$/.test(m.key.remoteJid)
+    if (!text.startsWith('!') && text.trim() && (isMentioned || isReplyToBot || isDM)) {
       text = '!ai ' + text.replace(/@\d+/g, '').trim()
     }
 
