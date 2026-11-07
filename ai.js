@@ -127,7 +127,7 @@ export async function askGemini(history, image, who, summary) {
           ? await callGroq(model, persona, history, timeout)
           : await callGemini(model, persona, history, image, timeout)
       console.log('AI:', `${provider}:${model}`, `${Date.now() - t0}ms`)
-      return text
+      return cleanAnswer(text)
     } catch (e) {
       lastErr = e
       console.error('AI gagal di', `${provider}:${model}`, '->', e.message)
@@ -168,4 +168,26 @@ export async function summarizeChat(prevSummary, msgs) {
     }
   }
   throw lastErr || new Error('Tidak ada model AI untuk meringkas')
+}
+
+const WRAP_KEYS = ['reply', 'text', 'message', 'response', 'answer', 'content']
+function unwrap(s) {
+  try {
+    const o = JSON.parse(s)
+    const k = o && typeof o === 'object' ? Object.keys(o) : []
+    if (k.length === 1 && WRAP_KEYS.includes(k[0]) && typeof o[k[0]] === 'string') {
+      return o[k[0]].trim()
+    }
+  } catch {}
+  return null
+}
+export function cleanAnswer(text) {
+  const t = String(text || '').trim()
+  const whole = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+  const direct = unwrap(whole ? whole[1] : t)
+  if (direct) return direct
+  const rest = t
+    .replace(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/gi, (m, j) => (unwrap(j) === null ? m : ''))
+    .trim()
+  return rest || t
 }
