@@ -202,7 +202,9 @@ async function start() {
       }
       const q = text.slice(4).trim()
       if (!q) return reply('Contoh: !ai apa itu Debian?')
-      const who = isOwner ? 'Hagure (pemilikmu)' : cleanName(m.pushName) || 'tidak diketahui'
+      const who = isOwner
+          ? 'Hagure (pemilikmu)'
+          : `${cleanName(m.pushName) || 'tidak diketahui'} (bukan pemilik)`
       try {
         let image
         if (m.message.imageMessage) {
