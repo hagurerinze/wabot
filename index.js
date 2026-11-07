@@ -119,6 +119,10 @@ async function start() {
     const quotedFrom = ctx?.participant ? jidNormalizedUser(ctx.participant) : ''
     const isReplyToBot = !!quotedFrom && me.includes(quotedFrom)
     const isDM = /@(s\.whatsapp\.net|lid)$/.test(m.key.remoteJid)
+    const qm = ctx?.quotedMessage
+    const quotedText = (
+      qm?.conversation || qm?.extendedTextMessage?.text || qm?.imageMessage?.caption || ''
+    ).trim()
     if (!text.startsWith('!') && text.trim() && (isMentioned || isReplyToBot || isDM)) {
       text = '!ai ' + text.replace(/@\d+/g, '').trim()
     }
@@ -242,7 +246,10 @@ async function start() {
             data: buf.toString('base64'),
           }
         }
-        const stored = image ? `[gambar] ${q}` : q
+        const qctx = quotedText
+          ? `[membalas pesan ${isReplyToBot ? 'Yurishy' : 'orang lain'}: "${quotedText.slice(0, 300)}"] `
+          : ''
+        const stored = image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
         const answer = await askGemini(history, image, who, getSummary(key))
         saveMessage(key, 'user', stored)
