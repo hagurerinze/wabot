@@ -11,8 +11,8 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory } from './db.js'
-import { askGemini } from './ai.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary } from './db.js'
+import { askGemini, summarizeChat } from './ai.js'
 import { generateImage } from './img.js'
 
 const execFileAsync = promisify(execFile)
@@ -43,6 +43,26 @@ function allow(key, max, windowMs) {
 
 const cleanName = (n) =>
   (n || '').replace(/[^\p{L}\p{N} ._-]/gu, '').trim().slice(0, 24)
+
+const SUMMARY_MAX = 30
+const SUMMARY_KEEP = 10
+const compacting = new Set()
+async function compactChat(key) {
+  if (compacting.has(key)) return
+  if (countMessages(key) <= SUMMARY_MAX) return
+  compacting.add(key)
+  try {
+    const old = getOldest(key, countMessages(key) - SUMMARY_KEEP)
+    const summary = await summarizeChat(getSummary(key), old)
+    saveSummary(key, summary)
+    deleteMessages(old.map((x) => x.id))
+    console.log('summary: updated,', old.length, 'messages')
+  } catch (e) {
+    console.error('summary gagal:', e.message)
+  } finally {
+    compacting.delete(key)
+  }
+}
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
@@ -224,10 +244,11 @@ async function start() {
         }
         const stored = image ? `[gambar] ${q}` : q
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image, who)
+        const answer = await askGemini(history, image, who, getSummary(key))
         saveMessage(key, 'user', stored)
         saveMessage(key, 'model', answer)
         await reply(answer)
+        compactChat(key)
       } catch (e) {
         console.error(e.message)
         await reply('AI lagi error, coba lagi nanti.')
