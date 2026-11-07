@@ -32,4 +32,40 @@ export function getHistory(chat, limit = 10) {
 
 export function clearHistory(chat) {
   clear.run(chat)
+  clearSum.run(chat)
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS summaries (
+    chat TEXT PRIMARY KEY,
+    summary TEXT NOT NULL,
+    ts INTEGER NOT NULL
+  );
+`)
+const countStmt = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE chat = ?')
+const oldestStmt = db.prepare(
+  'SELECT id, role, content FROM messages WHERE chat = ? ORDER BY id ASC LIMIT ?'
+)
+const delIdStmt = db.prepare('DELETE FROM messages WHERE id = ?')
+const getSum = db.prepare('SELECT summary FROM summaries WHERE chat = ?')
+const putSum = db.prepare(
+  'INSERT INTO summaries (chat, summary, ts) VALUES (?, ?, ?) ' +
+  'ON CONFLICT(chat) DO UPDATE SET summary = excluded.summary, ts = excluded.ts'
+)
+const clearSum = db.prepare('DELETE FROM summaries WHERE chat = ?')
+
+export function countMessages(chat) {
+  return countStmt.get(chat).n
+}
+export function getOldest(chat, n) {
+  return oldestStmt.all(chat, n)
+}
+export function deleteMessages(ids) {
+  for (const id of ids) delIdStmt.run(id)
+}
+export function getSummary(chat) {
+  return getSum.get(chat)?.summary || ''
+}
+export function saveSummary(chat, summary) {
+  putSum.run(chat, summary, Date.now())
 }
