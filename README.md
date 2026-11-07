@@ -151,6 +151,7 @@ The bot only saves `!ai` chats. It does not save normal WhatsApp messages.
 - The free plans of AI services can change their rules and limits at any time.
   Read their current terms before you use this bot for other people.
 - The bot logs only command names, tag IDs, and the AI model name, not the full text of messages.
+- Short summaries of old chats are saved in the local database (bot.db) on the owner's laptop. The !reset command deletes your history and your summary.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
