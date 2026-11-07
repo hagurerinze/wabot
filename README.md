@@ -17,6 +17,9 @@ Everyone can use these:
 - `!reset` - delete your chat memory
 
 In a group, you can also tag the bot number and write a message.
+You can also reply to a message from the bot. It answers like !ai, with no prefix.
+In a private chat, you can write without any prefix. It answers like !ai.
+Messages with no text (stickers, voice notes) are ignored.
 It works the same as `!ai`, but you do not need to type the command.
 
 Only the owner can use these:
@@ -151,7 +154,7 @@ The bot only saves `!ai` chats. It does not save normal WhatsApp messages.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
-  The bot only answers commands and tags. Do not use it for spam or bulk messages.
+  The bot only answers commands, tags, replies, and private chats. Do not use it for spam or bulk messages.
 
 ## License
 
