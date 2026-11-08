@@ -148,6 +148,9 @@ After you change the code or `.env`, use `botrestart`.
 - `botmem addfact`, `editfact`, `delfact`, `delperson` - add, change, or delete facts
 - `botmem editsummary <part of id>` - change a summary in a text editor
 - `botmem renumber` - set the fact ids to start from 1 again
+- `botmem notes` - read Yurishy's own notebook and its versions
+- `botmem editnotes`, `revert` - change the notebook or go back to an old version
+- `botmem proposals` - read the persona ideas that Yurishy suggests
 
 The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and private chats). It does not save other WhatsApp messages.
 
@@ -160,6 +163,7 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
 - The bot logs only command names, tag IDs, and the AI model name, not the full text of messages.
 - Short summaries of old chats are saved in the local database (bot.db) on the owner's laptop. The !reset command deletes your history and your summary.
 - Short facts about each person (for example a nickname or a hobby) are also saved in the local database. The !forget command deletes the facts about you.
+- Yurishy also keeps a small notebook about herself. It does not hold names or private facts about people. The owner can read and change it.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
