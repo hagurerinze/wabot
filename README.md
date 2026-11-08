@@ -141,8 +141,15 @@ After you change the code or `.env`, use `botrestart`.
 - `botchats` - list all saved chats
 - `botchats <part of id> [number]` - show the last messages of one chat
 - `botchat` - talk to Yurishy in the terminal
+- `botmem` - show what the bot remembers (messages, summaries, facts)
+- `botmem facts [part of id]` - list the facts about each person
+- `botmem summaries [part of id]` - list the chat summaries
+- `botmem chat <part of id>` - show the last messages of one chat
+- `botmem addfact`, `editfact`, `delfact`, `delperson` - add, change, or delete facts
+- `botmem editsummary <part of id>` - change a summary in a text editor
+- `botmem renumber` - set the fact ids to start from 1 again
 
-The bot only saves `!ai` chats. It does not save normal WhatsApp messages.
+The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and private chats). It does not save other WhatsApp messages.
 
 ## Privacy and safety
 
