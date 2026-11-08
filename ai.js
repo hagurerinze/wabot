@@ -133,7 +133,7 @@ export async function askGemini(history, image, who, summary, facts, notes) {
           ? await callGroq(model, persona, history, timeout)
           : await callGemini(model, persona, history, image, timeout)
       console.log('AI:', `${provider}:${model}`, `${Date.now() - t0}ms`)
-      return cleanAnswer(text)
+      return tidyForWhatsApp(cleanAnswer(text))
     } catch (e) {
       lastErr = e
       console.error('AI gagal di', `${provider}:${model}`, '->', e.message)
@@ -302,4 +302,24 @@ export async function reflectOnChat(notes, msgs) {
     }
   }
   throw lastErr || new Error('Tidak ada model AI untuk refleksi')
+}
+
+const EMOJI = /\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu
+const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/
+export function tidyForWhatsApp(text) {
+  let t = String(text || '')
+    .split('\n')
+    .filter((l) => TABLE_RULE.test(l) === false)
+    .map((l) => {
+      if (l.trim().startsWith('|') === false) return l
+      return l.split('|').map((c) => c.trim()).filter((c) => c !== '').join(' - ')
+    })
+    .join('\n')
+  t = t.replace(/^#{1,6}\s+/gm, '').replace(/\*\*([^*\n]+)\*\*/g, '*$1*')
+  let seen = 0
+  t = t.replace(EMOJI, (m) => {
+    seen += 1
+    return seen === 1 ? m : ''
+  })
+  return t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
 }
