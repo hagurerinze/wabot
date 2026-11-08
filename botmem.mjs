@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
 
 const dbPath = fileURLToPath(new URL('./bot.db', import.meta.url))
 const [cmd = 'overview', arg] = process.argv.slice(2)
-const writing = ['delfact', 'delperson', 'editfact', 'editsummary', 'addfact', 'renumber'].includes(cmd)
+const writing = ['delfact', 'delperson', 'editfact', 'editsummary', 'addfact', 'renumber', 'editnotes', 'revert', 'doneproposal', 'delproposal'].includes(cmd)
 const db = new Database(dbPath, { readonly: writing === false, fileMustExist: true })
 
 const short = (s, n = 70) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n)
@@ -32,7 +32,13 @@ botmem delperson <id>      hapus semua fakta satu orang (id lengkap)
 botmem editfact <id> <teks>   ganti teks satu fakta
 botmem editsummary <chat>  ubah ringkasan di editor teks
 botmem addfact <orang> <teks>   tambah fakta manual
-botmem renumber            susun ulang id fakta mulai dari 1`)
+botmem renumber            susun ulang id fakta mulai dari 1
+botmem notes [versi]       catatan pribadi Yurishy + riwayat versi
+botmem editnotes           ubah catatan di editor (jadi versi baru)
+botmem revert <versi>      kembalikan isi catatan versi lama (jadi versi baru)
+botmem proposals [all]     usulan upgrade persona dari Yurishy
+botmem doneproposal <id>   tandai usulan sudah dipakai
+botmem delproposal <id>    hapus usulan`)
 }
 
 if (cmd === 'overview') {
@@ -198,6 +204,58 @@ if (cmd === 'overview') {
     for (const r of rows) ins.run(r.person, r.fact, r.ts)
   })()
   console.log(`Id fakta disusun ulang: ${rows.length} fakta, id mulai dari 1.`)
+} else if (cmd === 'notes') {
+  const row =
+    arg === undefined
+      ? db.prepare('select version, body, ts, reason from self_notes order by version desc limit 1').get()
+      : db.prepare('select version, body, ts, reason from self_notes where version = ?').get(Number(arg))
+  if (row === undefined) {
+    console.log('Catatan belum ada.')
+  } else {
+    console.log(`Versi ${row.version} (${fmt(row.ts)}, ${row.reason})\n\n${row.body}\n`)
+  }
+  const list = db
+    .prepare('select version, ts, reason, length(body) as len from self_notes order by version desc limit 10')
+    .all()
+  if (list.length > 0) console.log('Riwayat terbaru:')
+  for (const v of list) console.log(`  v${v.version}  ${fmt(v.ts)}  ${v.len} karakter  ${v.reason}`)
+} else if (cmd === 'editnotes') {
+  const cur = db.prepare('select body from self_notes order by version desc limit 1').get()
+  const old = cur === undefined ? '' : cur.body
+  const file = join(tmpdir(), `botmem-notes-${Date.now()}.txt`)
+  writeFileSync(file, old)
+  spawnSync(process.env.EDITOR || process.env.VISUAL || 'nano', [file], { stdio: 'inherit' })
+  const edited = readFileSync(file, 'utf8').trim()
+  unlinkSync(file)
+  if (edited === '' || edited === old) {
+    console.log('Tidak ada perubahan.')
+  } else if (edited.length > 1500) {
+    console.log('Terlalu panjang (maksimal 1500 karakter), tidak disimpan.')
+  } else {
+    db.prepare('insert into self_notes (body, reason, ts) values (?, ?, ?)').run(edited, 'diedit pemilik', Date.now())
+    console.log('Disimpan sebagai versi baru.')
+  }
+} else if (cmd === 'revert') {
+  const row = db.prepare('select body from self_notes where version = ?').get(Number(arg))
+  if (row === undefined) {
+    console.log('Versi itu tidak ada. Lihat daftar dengan: botmem notes')
+  } else {
+    db.prepare('insert into self_notes (body, reason, ts) values (?, ?, ?)').run(row.body, `kembali ke v${arg}`, Date.now())
+    console.log(`Isi v${arg} disalin jadi versi baru.`)
+  }
+} else if (cmd === 'proposals') {
+  const rows =
+    arg === 'all'
+      ? db.prepare('select id, text, status from proposals order by id desc').all()
+      : db.prepare("select id, text, status from proposals where status = 'baru' order by id").all()
+  if (rows.length === 0) console.log('Tidak ada usulan.')
+  for (const r of rows) console.log(`  #${r.id} [${r.status}] ${r.text}`)
+} else if (cmd === 'doneproposal') {
+  const r = db.prepare("update proposals set status = 'selesai' where id = ?").run(Number(arg))
+  console.log(r.changes === 0 ? 'Usulan dengan id itu tidak ada.' : 'Ditandai selesai.')
+} else if (cmd === 'delproposal') {
+  const r = db.prepare('delete from proposals where id = ?').run(Number(arg))
+  console.log(r.changes === 0 ? 'Usulan dengan id itu tidak ada.' : 'Dihapus.')
 } else {
   usage()
 }

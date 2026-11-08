@@ -97,3 +97,39 @@ export function addFacts(person, facts) {
 export function deleteFacts(person) {
   delFactsStmt.run(person)
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS self_notes (
+    version INTEGER PRIMARY KEY AUTOINCREMENT,
+    body TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    ts INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'baru',
+    ts INTEGER NOT NULL
+  );
+`)
+const latestNotes = db.prepare('SELECT version, body, ts FROM self_notes ORDER BY version DESC LIMIT 1')
+const addNotes = db.prepare('INSERT INTO self_notes (body, reason, ts) VALUES (?, ?, ?)')
+const trimNotes = db.prepare(
+  'DELETE FROM self_notes WHERE version NOT IN (SELECT version FROM self_notes ORDER BY version DESC LIMIT 50)'
+)
+const addProp = db.prepare('INSERT OR IGNORE INTO proposals (text, ts) VALUES (?, ?)')
+const newProps = db.prepare("SELECT COUNT(*) AS n FROM proposals WHERE status = 'baru'")
+
+export function getSelfNotes() {
+  return latestNotes.get() || { version: 0, body: '', ts: 0 }
+}
+export function saveSelfNotes(body, reason) {
+  addNotes.run(body, reason, Date.now())
+  trimNotes.run()
+}
+export function addProposals(list) {
+  for (const t of list) {
+    if (newProps.get().n >= 20) break
+    addProp.run(t, Date.now())
+  }
+}

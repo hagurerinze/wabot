@@ -11,8 +11,8 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts } from './db.js'
-import { askGemini, summarizeChat, extractFacts } from './ai.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals } from './db.js'
+import { askGemini, summarizeChat, extractFacts, reflectOnChat } from './ai.js'
 import { generateImage } from './img.js'
 
 const execFileAsync = promisify(execFile)
@@ -47,6 +47,8 @@ const cleanName = (n) =>
 const SUMMARY_MAX = 30
 const SUMMARY_KEEP = 10
 const compacting = new Set()
+const REFLECT_MIN_MS = 6 * 3600 * 1000
+let lastReflect = 0
 async function compactChat(key, person) {
   if (compacting.has(key)) return
   if (countMessages(key) <= SUMMARY_MAX) return
@@ -59,6 +61,18 @@ async function compactChat(key, person) {
       addFacts(person, await extractFacts(getFacts(person), old))
     } catch (e) {
       console.error('fakta gagal:', e.message)
+    }
+    if (Date.now() - lastReflect > REFLECT_MIN_MS) {
+      lastReflect = Date.now()
+      try {
+        const cur = getSelfNotes()
+        const r = await reflectOnChat(cur.body, old)
+        if (r.notes !== null && r.notes !== cur.body) saveSelfNotes(r.notes, 'refleksi')
+        addProposals(r.proposals)
+        console.log('catatan: refleksi selesai,', r.proposals.length, 'usulan')
+      } catch (e) {
+        console.error('catatan gagal:', e.message)
+      }
     }
     deleteMessages(old.map((x) => x.id))
     console.log('summary: updated,', old.length, 'messages')
@@ -259,7 +273,7 @@ async function start() {
           : ''
         const stored = image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender))
+        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body)
         saveMessage(key, 'user', stored)
         saveMessage(key, 'model', answer)
         await reply(answer)
