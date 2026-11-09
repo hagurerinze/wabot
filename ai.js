@@ -300,7 +300,7 @@ export async function reflectOnChat(notes, msgs, decisions, lastReason) {
         for (const l of text.slice(j + 7).split('\n')) {
           if (l.trim().startsWith('- ') === false) continue
           const p = l.trim().slice(2).trim()
-          if (p.length >= 8 && p.length <= 200 && p.toUpperCase() !== 'KOSONG') props.push(p)
+          if (p.length >= 8 && p.length <= 200 && p.replace(/[^\p{L}]/gu, '').toUpperCase() !== 'KOSONG') props.push(p)
         }
       }
       return { notes: notesOut, proposals: props.slice(0, 3) }
