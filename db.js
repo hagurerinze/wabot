@@ -112,6 +112,9 @@ db.exec(`
     ts INTEGER NOT NULL
   );
 `)
+const propCols = db.prepare('PRAGMA table_info(proposals)').all().map((c) => c.name)
+if (propCols.includes('reason') === false) db.exec('ALTER TABLE proposals ADD COLUMN reason TEXT')
+if (propCols.includes('decided_ts') === false) db.exec('ALTER TABLE proposals ADD COLUMN decided_ts INTEGER')
 const latestNotes = db.prepare('SELECT version, body, ts FROM self_notes ORDER BY version DESC LIMIT 1')
 const addNotes = db.prepare('INSERT INTO self_notes (body, reason, ts) VALUES (?, ?, ?)')
 const trimNotes = db.prepare(
@@ -126,6 +129,13 @@ export function getSelfNotes() {
 export function saveSelfNotes(body, reason) {
   addNotes.run(body, reason, Date.now())
   trimNotes.run()
+}
+const decidedProps = db.prepare(
+  "SELECT text, status, reason FROM proposals WHERE status IN ('selesai', 'ditolak') ORDER BY COALESCE(decided_ts, ts) DESC LIMIT 10"
+)
+const waitingProps = db.prepare("SELECT text FROM proposals WHERE status = 'baru' ORDER BY id")
+export function getProposalDecisions() {
+  return { decided: decidedProps.all(), pending: waitingProps.all() }
 }
 export function addProposals(list) {
   for (const t of list) {

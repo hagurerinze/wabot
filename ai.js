@@ -235,7 +235,20 @@ export async function extractFacts(known, msgs) {
   throw lastErr || new Error('Tidak ada model AI untuk mencatat fakta')
 }
 
-export async function reflectOnChat(notes, msgs) {
+export function decisionText(d) {
+  if (!d) return ''
+  const mark = (x, word) => `- ${x.text}${x.reason ? ` (${word}${x.reason})` : ''}`
+  const ok = d.decided.filter((x) => x.status === 'selesai').map((x) => mark(x, 'catatan pemilik: '))
+  const no = d.decided.filter((x) => x.status === 'ditolak').map((x) => mark(x, 'alasan: '))
+  const wait = d.pending.map((x) => `- ${x.text}`)
+  let out = ''
+  if (ok.length > 0) out += `Usulanmu yang DITERIMA (sudah dipasang di persona-mu, jangan diusulkan lagi):\n${ok.join('\n')}\n\n`
+  if (no.length > 0) out += `Usulanmu yang DITOLAK (jangan diusulkan lagi kecuali ada alasan baru yang kuat):\n${no.join('\n')}\n\n`
+  if (wait.length > 0) out += `Usulanmu yang MASIH MENUNGGU (belum diputuskan, jangan dikirim ulang):\n${wait.join('\n')}\n\n`
+  return out === '' ? '' : `Keputusan pemilikmu:\n\n${out}`
+}
+
+export async function reflectOnChat(notes, msgs, decisions) {
   const lines = msgs
     .map((m) => {
       const t = String(m.content).replace(/\[membalas pesan [^\]]*?: "[\s\S]*?"\]\s*/g, '').slice(0, 300)
@@ -249,9 +262,10 @@ export async function reflectOnChat(notes, msgs) {
     'Batasnya: jangan menulis nama, id, lokasi, topik, atau hal pribadi tentang orang tertentu (itu disimpan di tempat lain); jangan mencatat isi percakapan seperti laporan, fokus pada dirimu sendiri; tulis dengan sudut pandang "aku"; jangan menulis password, kunci, atau data sensitif; jangan menulis aturan yang bertentangan dengan aturan intimu (batas, penolakan, kejujuran bahwa kamu AI). ' +
     'Catatan paling banyak 1200 karakter, jadi tulis ulang seluruhnya dan ringkas yang lama kalau perlu. ' +
     'Kamu juga boleh mengusulkan perubahan atau tambahan pada persona-mu (maksimal 3, satu kalimat tiap usulan). Usulan hanya saran untuk pemilikmu dan tidak berlaku sebelum dia menyetujuinya. ' +
+    'Kalau ada bagian "Keputusan pemilikmu", itu kabar tentang usulan lamamu: belajarlah dari alasannya, dan jangan mengusulkan lagi yang sudah diterima, ditolak, atau masih menunggu. ' +
     'Format jawaban persis:\nCATATAN:\n<isi catatan lengkap yang baru, atau tulis TETAP kalau tidak ada yang perlu diubah>\nUSULAN:\n- <usulan> (atau tulis KOSONG)'
   const prompt =
-    `Catatan pribadimu sekarang:\n${notes || '(masih kosong)'}\n\nObrolan terbaru:\n${lines}\n\nTulis pembaruan.`
+    `Catatan pribadimu sekarang:\n${notes || '(masih kosong)'}\n\n${decisionText(decisions)}Obrolan terbaru:\n${lines}\n\nTulis pembaruan.`
   const history = [{ role: 'user', content: prompt }]
   let lastErr
   for (const { provider, model } of CHAIN) {
