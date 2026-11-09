@@ -7,7 +7,8 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
 
 const dbPath = fileURLToPath(new URL('./bot.db', import.meta.url))
 const [cmd = 'overview', arg] = process.argv.slice(2)
-const writing = ['delfact', 'delperson', 'editfact', 'editsummary', 'addfact', 'renumber', 'editnotes', 'revert', 'doneproposal', 'delproposal'].includes(cmd)
+const reasonText = process.argv.slice(4).join(' ').trim()
+const writing = ['delfact', 'delperson', 'editfact', 'editsummary', 'addfact', 'renumber', 'editnotes', 'revert', 'doneproposal', 'rejectproposal', 'delproposal'].includes(cmd)
 const db = new Database(dbPath, { readonly: writing === false, fileMustExist: true })
 
 const short = (s, n = 70) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n)
@@ -37,7 +38,8 @@ botmem notes [versi]       catatan pribadi Yurishy + riwayat versi
 botmem editnotes           ubah catatan di editor (jadi versi baru)
 botmem revert <versi>      kembalikan isi catatan versi lama (jadi versi baru)
 botmem proposals [all]     usulan upgrade persona dari Yurishy
-botmem doneproposal <id>   tandai usulan sudah dipakai
+botmem doneproposal <id> [alasan]     tandai usulan diterima dan sudah dipakai
+botmem rejectproposal <id> <alasan>   tolak usulan (alasan dikirim ke Yurishy)
 botmem delproposal <id>    hapus usulan`)
 }
 
@@ -246,13 +248,20 @@ if (cmd === 'overview') {
 } else if (cmd === 'proposals') {
   const rows =
     arg === 'all'
-      ? db.prepare('select id, text, status from proposals order by id desc').all()
-      : db.prepare("select id, text, status from proposals where status = 'baru' order by id").all()
+      ? db.prepare('select id, text, status, reason from proposals order by id desc').all()
+      : db.prepare("select id, text, status, reason from proposals where status = 'baru' order by id").all()
   if (rows.length === 0) console.log('Tidak ada usulan.')
-  for (const r of rows) console.log(`  #${r.id} [${r.status}] ${r.text}`)
+  for (const r of rows) console.log(`  #${r.id} [${r.status}] ${r.text}${r.reason ? `\n      alasan: ${r.reason}` : ''}`)
 } else if (cmd === 'doneproposal') {
-  const r = db.prepare("update proposals set status = 'selesai' where id = ?").run(Number(arg))
-  console.log(r.changes === 0 ? 'Usulan dengan id itu tidak ada.' : 'Ditandai selesai.')
+  const r = db.prepare("update proposals set status = 'selesai', reason = ?, decided_ts = ? where id = ?").run(reasonText.slice(0, 200) || null, Date.now(), Number(arg))
+  console.log(r.changes === 0 ? 'Usulan dengan id itu tidak ada.' : 'Ditandai diterima.')
+} else if (cmd === 'rejectproposal') {
+  if (reasonText === '') {
+    console.log('Tulis alasan: botmem rejectproposal <id> <alasan>')
+  } else {
+    const r = db.prepare("update proposals set status = 'ditolak', reason = ?, decided_ts = ? where id = ?").run(reasonText.slice(0, 200), Date.now(), Number(arg))
+    console.log(r.changes === 0 ? 'Usulan dengan id itu tidak ada.' : 'Ditolak, alasan tersimpan.')
+  }
 } else if (cmd === 'delproposal') {
   const r = db.prepare('delete from proposals where id = ?').run(Number(arg))
   console.log(r.changes === 0 ? 'Usulan dengan id itu tidak ada.' : 'Dihapus.')

@@ -11,7 +11,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat } from './ai.js'
 import { generateImage } from './img.js'
 
@@ -66,7 +66,7 @@ async function compactChat(key, person) {
       lastReflect = Date.now()
       try {
         const cur = getSelfNotes()
-        const r = await reflectOnChat(cur.body, old)
+        const r = await reflectOnChat(cur.body, old, getProposalDecisions())
         if (r.notes !== null && r.notes !== cur.body) saveSelfNotes(r.notes, 'refleksi')
         addProposals(r.proposals)
         console.log('catatan: refleksi selesai,', r.proposals.length, 'usulan')
