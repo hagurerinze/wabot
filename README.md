@@ -164,6 +164,7 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
 - Short summaries of old chats are saved in the local database (bot.db) on the owner's laptop. The !reset command deletes your history and your summary.
 - Short facts about each person (for example a nickname or a hobby) are also saved in the local database. The !forget command deletes the facts about you.
 - Yurishy also keeps a small notebook about herself. It does not hold names or private facts about people. The owner can read and change it.
+- To answer, your messages can be sent to AI providers: Groq, Google Gemini, Cloudflare Workers AI, and OpenRouter. The free plans of some providers may keep your messages or use them to improve their products. Do not send private or sensitive information.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
