@@ -39,8 +39,8 @@ The owner has no limit. Other people have these limits:
 
 - The bot tries the models in `AI_CHAIN`, from the first to the last.
   If one model is slow, full, or has an error, the bot tries the next one.
-- My main choice is Groq because it is fast. Gemini is the backup.
-- Messages with a photo go to Gemini, because the Groq models I use only read text.
+- My main choice is Groq because it is fast. Gemini is the backup. Cloudflare Workers AI and OpenRouter are the last backups.
+- Messages with a photo go to Gemini, because the other providers I use only read text.
 - The bot gives up after about 25 seconds in total.
 - The bot logs which model answered and how long it took. It does not log the message text.
 
@@ -48,6 +48,8 @@ The owner has no limit. Other people have these limits:
 
 - Chat memory is saved in SQLite.
   In a group, each person has their own memory.
+  Old messages are turned into a short summary, and short facts about each person are saved.
+  Yurishy also has a small notebook about herself. Everything stays in `bot.db` on the owner's laptop.
 - Yurishy calls people by their WhatsApp name.
 - Yurishy's personality is in `persona.md`.
   When you change this file, the change works at once. You do not need to restart.
