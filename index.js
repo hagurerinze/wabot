@@ -48,7 +48,7 @@ const SUMMARY_MAX = 30
 const SUMMARY_KEEP = 10
 const compacting = new Set()
 const REFLECT_MIN_MS = 6 * 3600 * 1000
-let lastReflect = 0
+let lastReflect = getSelfNotes().ts || 0
 async function compactChat(key, person) {
   if (compacting.has(key)) return
   if (countMessages(key) <= SUMMARY_MAX) return
