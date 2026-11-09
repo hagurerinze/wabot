@@ -248,7 +248,13 @@ export function decisionText(d) {
   return out === '' ? '' : `Keputusan pemilikmu:\n\n${out}`
 }
 
-export async function reflectOnChat(notes, msgs, decisions) {
+export function editNotice(reason) {
+  const r = String(reason || '')
+  if (r.startsWith('pemilik:') === false) return ''
+  return `Kabar tentang catatanmu: pemilikmu baru saja mengubah catatan pribadimu (${r.slice(8).trim()}). Catatan di atas sudah versi hasil editnya. Jangan mengembalikan bagian yang dihapus, dan pelajari kenapa diubah.\n\n`
+}
+
+export async function reflectOnChat(notes, msgs, decisions, lastReason) {
   const lines = msgs
     .map((m) => {
       const t = String(m.content).replace(/\[membalas pesan [^\]]*?: "[\s\S]*?"\]\s*/g, '').slice(0, 300)
@@ -265,7 +271,7 @@ export async function reflectOnChat(notes, msgs, decisions) {
     'Kalau ada bagian "Keputusan pemilikmu", itu kabar tentang usulan lamamu: belajarlah dari alasannya, dan jangan mengusulkan lagi yang sudah diterima, ditolak, atau masih menunggu. ' +
     'Format jawaban persis:\nCATATAN:\n<isi catatan lengkap yang baru, atau tulis TETAP kalau tidak ada yang perlu diubah>\nUSULAN:\n- <usulan> (atau tulis KOSONG)'
   const prompt =
-    `Catatan pribadimu sekarang:\n${notes || '(masih kosong)'}\n\n${decisionText(decisions)}Obrolan terbaru:\n${lines}\n\nTulis pembaruan.`
+    `Catatan pribadimu sekarang:\n${notes || '(masih kosong)'}\n\n${decisionText(decisions)}${editNotice(lastReason)}Obrolan terbaru:\n${lines}\n\nTulis pembaruan.`
   const history = [{ role: 'user', content: prompt }]
   let lastErr
   for (const { provider, model } of CHAIN) {
