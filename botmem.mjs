@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
 const dbPath = fileURLToPath(new URL('./bot.db', import.meta.url))
 const [cmd = 'overview', arg] = process.argv.slice(2)
 const reasonText = process.argv.slice(4).join(' ').trim()
+const editReason = process.argv.slice(3).join(' ').trim()
 const writing = ['delfact', 'delperson', 'editfact', 'editsummary', 'addfact', 'renumber', 'editnotes', 'revert', 'doneproposal', 'rejectproposal', 'delproposal'].includes(cmd)
 const db = new Database(dbPath, { readonly: writing === false, fileMustExist: true })
 
@@ -35,8 +36,8 @@ botmem editsummary <chat>  ubah ringkasan di editor teks
 botmem addfact <orang> <teks>   tambah fakta manual
 botmem renumber            susun ulang id fakta mulai dari 1
 botmem notes [versi]       catatan pribadi Yurishy + riwayat versi
-botmem editnotes           ubah catatan di editor (jadi versi baru)
-botmem revert <versi>      kembalikan isi catatan versi lama (jadi versi baru)
+botmem editnotes           ubah catatan di editor, alasan opsional: botmem editnotes <alasan> (jadi versi baru, Yurishy diberi tahu)
+botmem revert <versi>      kembalikan isi catatan versi lama, alasan opsional setelah versi (Yurishy diberi tahu)
 botmem proposals [all]     usulan upgrade persona dari Yurishy
 botmem doneproposal <id> [alasan]     tandai usulan diterima dan sudah dipakai
 botmem rejectproposal <id> <alasan>   tolak usulan (alasan dikirim ke Yurishy)
@@ -234,7 +235,7 @@ if (cmd === 'overview') {
   } else if (edited.length > 1500) {
     console.log('Terlalu panjang (maksimal 1500 karakter), tidak disimpan.')
   } else {
-    db.prepare('insert into self_notes (body, reason, ts) values (?, ?, ?)').run(edited, 'diedit pemilik', Date.now())
+    db.prepare('insert into self_notes (body, reason, ts) values (?, ?, ?)').run(edited, 'pemilik: ' + (editReason.slice(0, 200) || 'diedit, tanpa alasan'), Date.now())
     console.log('Disimpan sebagai versi baru.')
   }
 } else if (cmd === 'revert') {
@@ -242,7 +243,7 @@ if (cmd === 'overview') {
   if (row === undefined) {
     console.log('Versi itu tidak ada. Lihat daftar dengan: botmem notes')
   } else {
-    db.prepare('insert into self_notes (body, reason, ts) values (?, ?, ?)').run(row.body, `kembali ke v${arg}`, Date.now())
+    db.prepare('insert into self_notes (body, reason, ts) values (?, ?, ?)').run(row.body, `pemilik: kembali ke v${arg}${reasonText ? ' - ' + reasonText.slice(0, 200) : ''}`, Date.now())
     console.log(`Isi v${arg} disalin jadi versi baru.`)
   }
 } else if (cmd === 'proposals') {

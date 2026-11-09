@@ -66,7 +66,7 @@ async function compactChat(key, person) {
       lastReflect = Date.now()
       try {
         const cur = getSelfNotes()
-        const r = await reflectOnChat(cur.body, old, getProposalDecisions())
+        const r = await reflectOnChat(cur.body, old, getProposalDecisions(), cur.reason)
         if (r.notes !== null && r.notes !== cur.body) saveSelfNotes(r.notes, 'refleksi')
         addProposals(r.proposals)
         console.log('catatan: refleksi selesai,', r.proposals.length, 'usulan')

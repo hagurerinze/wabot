@@ -115,7 +115,7 @@ db.exec(`
 const propCols = db.prepare('PRAGMA table_info(proposals)').all().map((c) => c.name)
 if (propCols.includes('reason') === false) db.exec('ALTER TABLE proposals ADD COLUMN reason TEXT')
 if (propCols.includes('decided_ts') === false) db.exec('ALTER TABLE proposals ADD COLUMN decided_ts INTEGER')
-const latestNotes = db.prepare('SELECT version, body, ts FROM self_notes ORDER BY version DESC LIMIT 1')
+const latestNotes = db.prepare('SELECT version, body, reason, ts FROM self_notes ORDER BY version DESC LIMIT 1')
 const addNotes = db.prepare('INSERT INTO self_notes (body, reason, ts) VALUES (?, ?, ?)')
 const trimNotes = db.prepare(
   'DELETE FROM self_notes WHERE version NOT IN (SELECT version FROM self_notes ORDER BY version DESC LIMIT 50)'
@@ -124,7 +124,7 @@ const addProp = db.prepare('INSERT OR IGNORE INTO proposals (text, ts) VALUES (?
 const newProps = db.prepare("SELECT COUNT(*) AS n FROM proposals WHERE status = 'baru'")
 
 export function getSelfNotes() {
-  return latestNotes.get() || { version: 0, body: '', ts: 0 }
+  return latestNotes.get() || { version: 0, body: '', reason: '', ts: 0 }
 }
 export function saveSelfNotes(body, reason) {
   addNotes.run(body, reason, Date.now())
