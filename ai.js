@@ -17,7 +17,8 @@ const CHAIN = (
   })
 
 const FALLBACK = 'Kamu adalah bot WhatsApp yang ramah. Jawab singkat dan jelas.'
-const TOTAL_MS = 25000
+const TOTAL_MS = 35000
+const TIMEOUTS = { gemini: 12000, cloudflare: 8000, openrouter: 6000, groq: 8000 }
 
 function getPersona() {
   try {
@@ -123,7 +124,7 @@ export async function askGemini(history, image, who, summary, facts, notes) {
     if (canUse(provider, image) === false) continue
     const left = TOTAL_MS - (Date.now() - started)
     if (left < 3000) break
-    const timeout = Math.min(provider === 'groq' ? 8000 : 10000, left)
+    const timeout = Math.min(TIMEOUTS[provider] || 10000, left)
     try {
       const t0 = Date.now()
       const text =
