@@ -11,7 +11,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodo, listTodos, finishTodo, removeTodo } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat } from './ai.js'
 import { generateImage } from './img.js'
 
@@ -164,6 +164,29 @@ async function start() {
         '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n!forget (hapus fakta tentangmu)\n\n' +
         'Pesan !ai dikirim ke Gemini dan disimpan di laptop owner. !reset menghapus riwayatmu.'
       )
+    } else if (text === '!todo' || text.startsWith('!todo ')) {
+      if (!isOwner) return reply('Command ini khusus owner.')
+      if (jid.endsWith('@g.us')) return reply('Todo lewat chat pribadi saja ya.')
+      const parts = text.split(/\s+/)
+      const sub = (parts[1] || '').toLowerCase()
+      const rest = parts.slice(2).join(' ').trim()
+      if (sub === '' || sub === 'list') {
+        const items = listTodos(sender)
+        await reply(
+          items.length
+            ? items.map((x, i) => `${i + 1}. ${x.text}`).join('\n')
+            : 'Kosong. Lagi nggak ada kerjaan, atau lupa nulis?'
+        )
+      } else if (sub === 'selesai' || sub === 'hapus') {
+        const n = Number(rest)
+        const ok = Number.isInteger(n) && n > 0
+        const t = ok ? (sub === 'selesai' ? finishTodo(sender, n) : removeTodo(sender, n)) : null
+        await reply(t ? `${sub === 'selesai' ? 'Beres' : 'Kuhapus'}: ${t}` : 'Nomornya nggak ada. Cek lagi lewat !todo.')
+      } else {
+        const item = (sub === 'tambah' ? rest : text.slice(5)).replace(/\s+/g, ' ').trim().slice(0, 200)
+        if (!item) return reply('Mau nulis apa? Contoh: !todo beli kabel')
+        await reply(addTodo(sender, item) ? `Oke, kucatat: ${item}` : 'Todo-mu sudah penuh (30). Selesaikan atau hapus dulu.')
+      }
     } else if (text === '!forget') {
       deleteFacts(sender)
       await reply('Oke, fakta tentangmu sudah kuhapus.')

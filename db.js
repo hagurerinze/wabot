@@ -143,3 +143,38 @@ export function addProposals(list) {
     addProp.run(t, Date.now())
   }
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS todos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person TEXT NOT NULL,
+    text TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    ts INTEGER NOT NULL,
+    done_ts INTEGER
+  );
+`)
+const addTodoStmt = db.prepare('INSERT INTO todos (person, text, ts) VALUES (?, ?, ?)')
+const openTodosStmt = db.prepare('SELECT id, text FROM todos WHERE person = ? AND done = 0 ORDER BY id')
+const doneTodoStmt = db.prepare('UPDATE todos SET done = 1, done_ts = ? WHERE id = ?')
+const delTodoStmt = db.prepare('DELETE FROM todos WHERE id = ?')
+export function addTodo(person, text) {
+  if (openTodosStmt.all(person).length >= 30) return false
+  addTodoStmt.run(person, text, Date.now())
+  return true
+}
+export function listTodos(person) {
+  return openTodosStmt.all(person)
+}
+export function finishTodo(person, n) {
+  const row = openTodosStmt.all(person)[n - 1]
+  if (!row) return null
+  doneTodoStmt.run(Date.now(), row.id)
+  return row.text
+}
+export function removeTodo(person, n) {
+  const row = openTodosStmt.all(person)[n - 1]
+  if (!row) return null
+  delTodoStmt.run(row.id)
+  return row.text
+}
