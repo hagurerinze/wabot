@@ -161,11 +161,10 @@ async function start() {
     } else if (text === '!help') {
       await reply(
         'Command:\n!ping\n!help\n!uptime\n!ai <pertanyaan> (bisa kirim gambar)\n' +
-        '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n!forget (hapus fakta tentangmu)\n!todo (daftar tugas pribadi, khusus chat pribadi)\n\n' +
+        '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n!forget (hapus fakta tentangmu)\n!todo (daftar tugas pribadi, tiap orang punya sendiri)\n\n' +
         'Pesan !ai dikirim ke layanan AI (Gemini, Cloudflare, dan lainnya) dan disimpan di laptop owner. !reset menghapus riwayatmu. Daftar !todo juga disimpan di laptop owner tapi tidak dikirim ke AI, dan !todo kosongkan menghapus semuanya.'
       )
     } else if (text === '!todo' || /^!todo\s/.test(text)) {
-      if (jid.endsWith('@g.us')) return reply('Todo lewat chat pribadi saja ya, biar daftarmu tidak terbaca satu grup.')
       if (!isOwner && !allow(`todo:${sender}`, 10, 60000)) return reply('Pelan-pelan, tunggu sebentar ya.')
       const body = text.slice(5).trim()
       const head = body.split(/\s+/)[0].toLowerCase()
