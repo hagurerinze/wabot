@@ -178,3 +178,46 @@ export function removeTodo(person, n) {
   delTodoStmt.run(row.id)
   return row.text
 }
+
+export function addTodos(person, items) {
+  const open = openTodosStmt.all(person)
+  const have = new Set(open.map((x) => x.text.toLowerCase()))
+  let added = 0
+  let dup = 0
+  let full = 0
+  for (const t of items) {
+    if (have.has(t.toLowerCase())) {
+      dup++
+    } else if (open.length + added >= 30) {
+      full++
+    } else {
+      addTodoStmt.run(person, t, Date.now())
+      have.add(t.toLowerCase())
+      added++
+    }
+  }
+  return { added, dup, full, total: open.length + added }
+}
+function pickTodos(person, nums) {
+  const open = openTodosStmt.all(person)
+  const rows = []
+  for (const n of new Set(nums)) {
+    const row = open[n - 1]
+    if (row) rows.push(row)
+  }
+  return rows
+}
+export function finishTodos(person, nums) {
+  const rows = pickTodos(person, nums)
+  const now = Date.now()
+  for (const r of rows) doneTodoStmt.run(now, r.id)
+  return rows.map((r) => r.text)
+}
+export function removeTodos(person, nums) {
+  const rows = pickTodos(person, nums)
+  for (const r of rows) delTodoStmt.run(r.id)
+  return rows.map((r) => r.text)
+}
+export function clearTodos(person) {
+  db.prepare('DELETE FROM todos WHERE person = ?').run(person)
+}
