@@ -11,7 +11,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodo, listTodos, finishTodo, removeTodo } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat } from './ai.js'
 import { generateImage } from './img.js'
 
@@ -161,31 +161,46 @@ async function start() {
     } else if (text === '!help') {
       await reply(
         'Command:\n!ping\n!help\n!uptime\n!ai <pertanyaan> (bisa kirim gambar)\n' +
-        '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n!forget (hapus fakta tentangmu)\n\n' +
-        'Pesan !ai dikirim ke Gemini dan disimpan di laptop owner. !reset menghapus riwayatmu.'
+        '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n!forget (hapus fakta tentangmu)\n!todo (daftar tugas pribadi, khusus chat pribadi)\n\n' +
+        'Pesan !ai dikirim ke layanan AI (Gemini, Cloudflare, dan lainnya) dan disimpan di laptop owner. !reset menghapus riwayatmu. Daftar !todo juga disimpan di laptop owner tapi tidak dikirim ke AI, dan !todo kosongkan menghapus semuanya.'
       )
-    } else if (text === '!todo' || text.startsWith('!todo ')) {
-      if (!isOwner) return reply('Command ini khusus owner.')
-      if (jid.endsWith('@g.us')) return reply('Todo lewat chat pribadi saja ya.')
-      const parts = text.split(/\s+/)
-      const sub = (parts[1] || '').toLowerCase()
-      const rest = parts.slice(2).join(' ').trim()
-      if (sub === '' || sub === 'list') {
+    } else if (text === '!todo' || /^!todo\s/.test(text)) {
+      if (jid.endsWith('@g.us')) return reply('Todo lewat chat pribadi saja ya, biar daftarmu tidak terbaca satu grup.')
+      if (!isOwner && !allow(`todo:${sender}`, 10, 60000)) return reply('Pelan-pelan, tunggu sebentar ya.')
+      const body = text.slice(5).trim()
+      const head = body.split(/\s+/)[0].toLowerCase()
+      if (body === '' || head === 'list') {
         const items = listTodos(sender)
         await reply(
           items.length
             ? items.map((x, i) => `${i + 1}. ${x.text}`).join('\n')
             : 'Kosong. Lagi nggak ada kerjaan, atau lupa nulis?'
         )
-      } else if (sub === 'selesai' || sub === 'hapus') {
-        const n = Number(rest)
-        const ok = Number.isInteger(n) && n > 0
-        const t = ok ? (sub === 'selesai' ? finishTodo(sender, n) : removeTodo(sender, n)) : null
-        await reply(t ? `${sub === 'selesai' ? 'Beres' : 'Kuhapus'}: ${t}` : 'Nomornya nggak ada. Cek lagi lewat !todo.')
+      } else if (head === 'kosongkan') {
+        clearTodos(sender)
+        await reply('Semua todo-mu sudah kuhapus.')
+      } else if (head === 'selesai' || head === 'hapus') {
+        const nums = body.split(/[\s,]+/).slice(1).map(Number).filter((n) => Number.isInteger(n) && n > 0)
+        const done = head === 'selesai' ? finishTodos(sender, nums) : removeTodos(sender, nums)
+        await reply(
+          done.length
+            ? `${head === 'selesai' ? 'Beres' : 'Kuhapus'} ${done.length}: ${done.join('; ')}`
+            : 'Nomornya nggak ada. Cek lagi lewat !todo.'
+        )
       } else {
-        const item = (sub === 'tambah' ? rest : text.slice(5)).replace(/\s+/g, ' ').trim().slice(0, 200)
-        if (!item) return reply('Mau nulis apa? Contoh: !todo beli kabel')
-        await reply(addTodo(sender, item) ? `Oke, kucatat: ${item}` : 'Todo-mu sudah penuh (30). Selesaikan atau hapus dulu.')
+        const raw = head === 'tambah' ? body.slice(6) : body
+        const clean = (x) => x.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').trim().slice(0, 200)
+        const all = raw.split(/[\n;]+/).map(clean).filter(Boolean)
+        const picked = all.slice(0, 10)
+        if (picked.length === 0) return reply('Mau nulis apa? Contoh: !todo beli kabel')
+        const r = addTodos(sender, picked)
+        const out = []
+        if (r.added > 0) out.push(`Oke, kucatat ${r.added} item.`)
+        if (r.dup > 0) out.push(`${r.dup} sudah ada.`)
+        if (r.full > 0) out.push(`${r.full} tidak muat, batasnya 30 yang terbuka.`)
+        if (all.length > picked.length) out.push('Maksimal 10 per pesan, sisanya belum kucatat.')
+        if (r.added > 0) out.push(`Total ${r.total} yang terbuka.`)
+        await reply(out.join(' '))
       }
     } else if (text === '!forget') {
       deleteFacts(sender)
