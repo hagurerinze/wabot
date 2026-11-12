@@ -13,6 +13,76 @@ import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
 import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat } from './ai.js'
+
+// ---- todo lewat obrolan biasa ----
+const TODO_WORD = /\b(?:to-?do|to do|tugas)\b/i
+const TODO_ADD_VERB = /\b(?:tambah|catat|masukin|masukkan)\w*/i
+const TODO_DONE_WORD = /\b(?:selesai|beres|kelar)\b/i
+const TODO_LIST_Q = /\b(?:to-?do|to do)\b(?:\s*(?:ku|gw|gue|aku|saya|kita))?\s*(?:apa|apaan|list|daftar|berapa)\b|\b(?:lihat|liat|cek|spill|tunjukin|kasih tau)\b[\s\S]{0,12}\b(?:to-?do|to do)\b/i
+
+function cleanTodoText(x) {
+  return String(x).replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').trim().slice(0, 200)
+}
+
+function applyTodoMarks(sender, marks) {
+  const out = []
+  const adds = marks.filter((x) => x.kind === 'ADD').flatMap((x) => x.items).map(cleanTodoText).filter(Boolean)
+  if (adds.length) {
+    const picked = adds.slice(0, 10)
+    const r = addTodos(sender, picked)
+    if (r.added > 0) out.push(`Kucatat: ${picked.join('; ')}.`)
+    if (r.dup > 0) out.push(`${r.dup} sudah ada.`)
+    if (r.full > 0) out.push(`${r.full} tidak muat, batasnya 30 yang terbuka.`)
+    if (adds.length > picked.length) out.push('Maksimal 10 per pesan, sisanya belum kucatat.')
+    if (r.added > 0) out.push(`Total ${r.total} yang terbuka.`)
+  }
+  const dones = marks.filter((x) => x.kind === 'DONE').flatMap((x) => x.items).slice(0, 10)
+  const nums = dones.filter((x) => /^\d+$/.test(x)).map(Number)
+  if (nums.length) {
+    const r = finishTodos(sender, nums)
+    out.push(r.length ? `Beres ${r.length}: ${r.join('; ')}` : 'Nomornya nggak ada. Cek lagi lewat !todo.')
+  }
+  for (const kw of dones.filter((x) => !/^\d+$/.test(x))) {
+    const hits = listTodos(sender)
+      .map((x, i) => ({ n: i + 1, text: x.text }))
+      .filter((x) => x.text.toLowerCase().includes(kw.toLowerCase()))
+    if (hits.length === 1) {
+      finishTodos(sender, [hits[0].n])
+      out.push(`Beres: ${hits[0].text}`)
+    } else if (hits.length === 0) {
+      out.push(`Nggak ada todo yang cocok dengan "${kw}". Cek lewat !todo.`)
+    } else {
+      out.push(`"${kw}" cocok dengan beberapa todo:\n${hits.map((h) => `${h.n}. ${h.text}`).join('\n')}\nSebut nomornya ya.`)
+    }
+  }
+  return out.join('\n')
+}
+
+// dikerjakan kode langsung, tanpa AI: lihat daftar dan selesai pakai nomor
+function todoDirect(sender, q) {
+  if (TODO_LIST_Q.test(q) && !TODO_ADD_VERB.test(q)) {
+    const items = listTodos(sender)
+    return items.length
+      ? items.map((x, i) => `${i + 1}. ${x.text}`).join('\n')
+      : 'Kosong. Lagi nggak ada kerjaan, atau lupa nulis?'
+  }
+  if (/\b(?:to-?do|to do)\b[^\d]{0,15}\d/i.test(q) && TODO_DONE_WORD.test(q) && !TODO_ADD_VERB.test(q)) {
+    const nums = (q.match(/\d+/g) || []).map(Number).filter((n) => n > 0 && n <= 30)
+    if (nums.length) return applyTodoMarks(sender, [{ kind: 'DONE', items: nums.map(String) }])
+  }
+  return null
+}
+
+// cadangan kalau semua AI gagal: hanya menambah
+function todoFallback(sender, q) {
+  if (!TODO_ADD_VERB.test(q) || !TODO_WORD.test(q)) return null
+  const w = q.match(/\b(?:to-?do|to do|tugas)\b/i)
+  const rest = q
+    .slice(w.index + w[0].length)
+    .replace(/^(?:[\s,:\-]|\b(?:ku|gw|gue|aku|saya|dong|donk|ya|yuk|yuri|ttg|tentang|tambah\w*|catat\w*|masuk\w*)\b)+/i, '')
+  const items = rest.split(/[\n;]+/).map(cleanTodoText).filter(Boolean)
+  return items.length ? applyTodoMarks(sender, [{ kind: 'ADD', items }]) : null
+}
 import { generateImage } from './img.js'
 
 const execFileAsync = promisify(execFile)
@@ -162,7 +232,7 @@ async function start() {
       await reply(
         'Command:\n!ping\n!help\n!uptime\n!ai <pertanyaan> (bisa kirim gambar)\n' +
         '!sticker (kirim gambar dengan caption ini)\n!history\n!reset\n!forget (hapus fakta tentangmu)\n!todo (daftar tugas pribadi, tiap orang punya sendiri)\n\n' +
-        'Pesan !ai dikirim ke layanan AI (Gemini, Cloudflare, dan lainnya) dan disimpan di laptop owner. !reset menghapus riwayatmu. Daftar !todo juga disimpan di laptop owner tapi tidak dikirim ke AI, dan !todo kosongkan menghapus semuanya.'
+        'Pesan !ai dikirim ke layanan AI (Gemini, Cloudflare, dan lainnya) dan disimpan di laptop owner. !reset menghapus riwayatmu. Daftar !todo juga disimpan di laptop owner tapi daftarnya tidak dikirim ke AI (pesan yang kamu ketik tentang todo tetap lewat AI seperti pesan biasa), dan !todo kosongkan menghapus semuanya.'
       )
     } else if (text === '!todo' || /^!todo\s/.test(text)) {
       if (!isOwner && !allow(`todo:${sender}`, 10, 60000)) return reply('Pelan-pelan, tunggu sebentar ya.')
@@ -292,6 +362,12 @@ async function start() {
       const who = isOwner
           ? 'Hagure (pemilikmu)'
           : `${cleanName(m.pushName) || 'tidak diketahui'} (bukan pemilik)`
+      const todoMode = TODO_WORD.test(q)
+      if (todoMode) {
+        const direct = todoDirect(sender, q)
+        if (direct) return reply(direct)
+      }
+      const todoMarks = []
       try {
         let image
         if (m.message.imageMessage) {
@@ -310,14 +386,18 @@ async function start() {
           : ''
         const stored = image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body)
+        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks })
+        const todoNote = todoMode ? applyTodoMarks(sender, todoMarks) : ''
+        const finalText = [answer, todoNote].filter(Boolean).join('\n\n')
+        if (!finalText) throw new Error('jawaban kosong')
         saveMessage(key, 'user', stored)
-        saveMessage(key, 'model', answer)
-        await reply(answer)
+        saveMessage(key, 'model', answer || '(todo diproses)')
+        await reply(finalText)
         compactChat(key, sender)
       } catch (e) {
         console.error(e.message)
-        await reply('AI lagi error, coba lagi nanti.')
+        const fb = todoMode ? todoFallback(sender, q) : null
+        await reply(fb ? `${fb}\n(AI lagi error, jadi kucatat langsung.)` : 'AI lagi error, coba lagi nanti.')
       }
     }
   })
