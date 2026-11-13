@@ -15,6 +15,13 @@ Everyone can use these:
 - `!sticker` - send a photo with this caption to get a sticker
 - `!history` - show your last chat messages
 - `!reset` - delete your chat memory
+- `!forget` - delete the facts the bot saved about you
+- `!todo` - show your todo list. Each person has their own list, also in a group
+- `!todo <text>` - add a todo (you can also write `!todo tambah <text>`).
+  Use `;` or a new line to add many at once (up to 10 per message, and 30 open todos for each person)
+- `!todo selesai 1 3` - mark items as done by their number
+- `!todo hapus 2` - delete items by their number
+- `!todo kosongkan` - delete your whole list
 
 In a group, you can also tag the bot number and write a message.
 You can also reply to a message from the bot. It answers like !ai, with no prefix.
@@ -34,6 +41,32 @@ The owner has no limit. Other people have these limits:
 - `!ai`: 5 per minute and 50 per day for each person
 - `!ai`: 300 per day for everyone together
 - `!sticker`: 3 per minute for each person, and one sticker at a time
+- `!todo`: 10 per minute for each person
+
+## Todo, time, weather, and laptop status in chat
+
+You can talk to Yurishy in a normal way (tag, reply, or private chat). You do not need to type `!todo`:
+
+- "todo ku apa ya" - shows your list. The bot reads it from the database, and the AI does not see your list.
+- "todo 2 selesai" - marks item 2 as done. The bot uses the number directly.
+- "tambah todo ku, ttg beli kabel" - adds a todo.
+  The AI reads the message and writes a hidden tag. The bot saves the todo, removes the tag, and shows what it saved.
+- "todo kabel udah selesai" - marks the todo with that word as done.
+  If two todos have the same word, Yurishy asks for the number.
+- If all AI models fail, the bot can still add a todo from a simple "tambah todo ..." message.
+
+The AI is only told about the todo tags when the message has the word "todo" or "tugas".
+Deleting a todo is not done by chat. Use `!todo hapus`.
+
+Yurishy also knows these things:
+
+- The date and time in Asia/Jakarta (WIB). The time zone is written in `ai.js`.
+- The weather, when the message has a word like "cuaca" or "hujan".
+  The bot gets it from [Open-Meteo](https://open-meteo.com/). It is free and needs no key.
+  The default place is Medan. The answer is saved for 15 minutes.
+- The status of her laptop (CPU temperature, battery, charger, load, RAM, uptime),
+  when the message has a word like "suhu" or "baterai".
+  If the battery shows 0%, the bot tells the AI that the battery is broken, so Yurishy does not worry.
 
 ## How the AI works
 
@@ -63,6 +96,7 @@ The owner has no limit. Other people have these limits:
 - A free Groq API key (main AI)
 - A Gemini API key from Google AI Studio (backup AI and photos)
 - A free Cloudflare account (only for `!img`)
+- No key is needed for the weather. The bot uses Open-Meteo.
 
 ## Setup
 
@@ -90,6 +124,8 @@ BLOCKED=
   on the Groq console and in Google AI Studio from time to time.
 - `BLOCKED` is a list of sender IDs the bot will ignore, separated by commas.
   You can leave it empty.
+- Optional: `WEATHER_CITY`, `WEATHER_LAT`, and `WEATHER_LON` set the place for the weather.
+  If you leave them out, the bot uses Medan.
 
 ## Run
 
@@ -167,6 +203,11 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
 - Short facts about each person (for example a nickname or a hobby) are also saved in the local database. The !forget command deletes the facts about you.
 - Yurishy also keeps a small notebook about herself. It does not hold names or private facts about people. The owner can read and change it.
 - To answer, your messages can be sent to AI providers: Groq, Google Gemini, Cloudflare Workers AI, and OpenRouter. The free plans of some providers may keep your messages or use them to improve their products. Do not send private or sensitive information.
+- Your todo list is saved in `bot.db` on the owner's laptop. The list is not sent to AI.
+  But when you write about your todos in a normal chat, that message is sent to AI like any other message.
+- In a group, if you ask for your todo list, everyone in the group can read it.
+- For the weather, the bot asks Open-Meteo. It sends only the coordinates of the place, not your messages.
+- Yurishy can tell anyone the temperature and the battery status of the laptop.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
