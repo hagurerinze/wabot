@@ -13,6 +13,10 @@ import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
 import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat } from './ai.js'
+import { getWeather } from './weather.js'
+import { getSelfStatus } from './selfstat.js'
+const SELF_WORD = /\b(?:suhu|panas|baterai|batre|baterei|battery|charger|cpu|ram|uptime|kondisi)\b/i
+const WEATHER_WORD = /\b(?:cuaca|hujan|gerimis|mendung|payung|weather|suhu|jemur)\b/i
 
 // ---- todo lewat obrolan biasa ----
 const TODO_WORD = /\b(?:to-?do|to do|tugas)\b/i
@@ -368,6 +372,16 @@ async function start() {
         if (direct) return reply(direct)
       }
       const todoMarks = []
+      let weather = ''
+      const selfstat = SELF_WORD.test(q) ? getSelfStatus() : ''
+      if (WEATHER_WORD.test(q)) {
+        try {
+          weather = await getWeather()
+        } catch (e) {
+          console.error('cuaca:', e.message)
+          weather = 'tidak tersedia sekarang (gagal diambil), jangan mengarang cuaca'
+        }
+      }
       try {
         let image
         if (m.message.imageMessage) {
@@ -386,7 +400,7 @@ async function start() {
           : ''
         const stored = image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks })
+        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat })
         const todoNote = todoMode ? applyTodoMarks(sender, todoMarks) : ''
         const finalText = [answer, todoNote].filter(Boolean).join('\n\n')
         if (!finalText) throw new Error('jawaban kosong')
