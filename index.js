@@ -11,8 +11,8 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos } from './db.js'
-import { askGemini, summarizeChat, extractFacts, reflectOnChat } from './ai.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes } from './db.js'
+import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
 const SELF_WORD = /\b(?:suhu|panas|baterai|batre|baterei|battery|charger|cpu|ram|uptime|kondisi)\b/i
@@ -131,6 +131,12 @@ async function compactChat(key, person) {
     const old = getOldest(key, countMessages(key) - SUMMARY_KEEP)
     const summary = await summarizeChat(getSummary(key), old)
     saveSummary(key, summary)
+    try {
+      const ep = await makeEpisode(old)
+      addEpisode(key, ep.text, ep.tags, old[0]?.ts, old[old.length - 1]?.ts)
+    } catch (e) {
+      console.error('kartu gagal:', e.message)
+    }
     try {
       addFacts(person, await extractFacts(getFacts(person), old))
     } catch (e) {
@@ -374,6 +380,12 @@ async function start() {
       const todoMarks = []
       let weather = ''
       const selfstat = SELF_WORD.test(q) ? getSelfStatus() : ''
+      const curSum = getSummary(key)
+      const memories = findEpisodes(key, q, 4)
+        .filter((e) => e.text !== curSum)
+        .slice(0, 3)
+        .map((e) => `(${new Date(e.ts_to).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', year: 'numeric' })}) ${e.text.slice(0, 600)}`)
+      if (memories.length) console.log('kartu terpakai:', memories.length)
       if (WEATHER_WORD.test(q)) {
         try {
           weather = await getWeather()
@@ -400,7 +412,7 @@ async function start() {
           : ''
         const stored = image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat })
+        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, memories })
         const todoNote = todoMode ? applyTodoMarks(sender, todoMarks) : ''
         const finalText = [answer, todoNote].filter(Boolean).join('\n\n')
         if (!finalText) throw new Error('jawaban kosong')

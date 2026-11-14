@@ -7,3 +7,4 @@ auth/
 *.bak
 *.0.bak
 *.bak-*
+*.bak*
