@@ -33,6 +33,7 @@ export function getHistory(chat, limit = 10) {
 export function clearHistory(chat) {
   clear.run(chat)
   clearSum.run(chat)
+  clearArchive(chat)
 }
 
 db.exec(`
@@ -44,7 +45,7 @@ db.exec(`
 `)
 const countStmt = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE chat = ?')
 const oldestStmt = db.prepare(
-  'SELECT id, role, content FROM messages WHERE chat = ? ORDER BY id ASC LIMIT ?'
+  'SELECT id, role, content, ts FROM messages WHERE chat = ? ORDER BY id ASC LIMIT ?'
 )
 const delIdStmt = db.prepare('DELETE FROM messages WHERE id = ?')
 const getSum = db.prepare('SELECT summary FROM summaries WHERE chat = ?')
@@ -60,8 +61,101 @@ export function countMessages(chat) {
 export function getOldest(chat, n) {
   return oldestStmt.all(chat, n)
 }
+db.exec(`
+  CREATE TABLE IF NOT EXISTS messages_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    orig_id INTEGER,
+    chat TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    archived_ts INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_arch_chat_ts ON messages_archive(chat, ts);
+  CREATE TABLE IF NOT EXISTS episodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat TEXT NOT NULL,
+    text TEXT NOT NULL,
+    tags TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT 'episode',
+    ts_from INTEGER,
+    ts_to INTEGER NOT NULL,
+    created_ts INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ep_chat ON episodes(chat, ts_to);
+  CREATE VIRTUAL TABLE IF NOT EXISTS episodes_fts USING fts5(text, tags, tokenize = 'unicode61 remove_diacritics 2');
+`)
+// ringkasan yang sudah ada disalin sekali jadi kartu pertama
+if (db.pragma('user_version', { simple: true }) < 1) {
+  db.exec(`
+    INSERT INTO episodes (chat, text, kind, ts_to, created_ts)
+      SELECT chat, summary, 'ringkasan-lama', ts, ts FROM summaries;
+    INSERT INTO episodes_fts (rowid, text, tags)
+      SELECT id, text, tags FROM episodes WHERE id NOT IN (SELECT rowid FROM episodes_fts);
+  `)
+  db.pragma('user_version = 1')
+}
+const archiveStmt = db.prepare(
+  'INSERT INTO messages_archive (orig_id, chat, role, content, ts, archived_ts) ' +
+  'SELECT id, chat, role, content, ts, ? FROM messages WHERE id = ?'
+)
+const archiveAndDelete = db.transaction((list) => {
+  const now = Date.now()
+  for (const id of list) {
+    archiveStmt.run(now, id)
+    delIdStmt.run(id)
+  }
+})
+const delArchStmt = db.prepare('DELETE FROM messages_archive WHERE chat = ?')
+const delEpFtsStmt = db.prepare('DELETE FROM episodes_fts WHERE rowid IN (SELECT id FROM episodes WHERE chat = ?)')
+const delEpStmt = db.prepare('DELETE FROM episodes WHERE chat = ?')
+const clearArchiveTx = db.transaction((chat) => {
+  delEpFtsStmt.run(chat)
+  delEpStmt.run(chat)
+  delArchStmt.run(chat)
+})
+function clearArchive(chat) {
+  clearArchiveTx(chat)
+}
 export function deleteMessages(ids) {
-  for (const id of ids) delIdStmt.run(id)
+  archiveAndDelete(ids)
+}
+
+const epExists = db.prepare("SELECT 1 FROM episodes WHERE chat = ? AND kind = 'episode' AND ts_to = ?")
+const epInsert = db.prepare(
+  'INSERT INTO episodes (chat, text, tags, kind, ts_from, ts_to, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)'
+)
+const epFtsInsert = db.prepare('INSERT INTO episodes_fts (rowid, text, tags) VALUES (?, ?, ?)')
+const addEpisodeTx = db.transaction((chat, text, tags, tsFrom, tsTo) => {
+  if (epExists.get(chat, tsTo)) return false
+  const r = epInsert.run(chat, text, tags, 'episode', tsFrom ?? null, tsTo, Date.now())
+  epFtsInsert.run(r.lastInsertRowid, text, tags)
+  return true
+})
+export function addEpisode(chat, text, tags, tsFrom, tsTo) {
+  return addEpisodeTx(chat, text, tags || '', tsFrom, tsTo || Date.now())
+}
+
+const STOP_WORDS = new Set(
+  ('yang dan itu ini aku kamu saya gue gua lu lo yuri yurishy apa kok dong donk deh sih nih tuh dengan untuk dari pada ' +
+    'ada adalah atau juga sudah udah belum tidak nggak gak bisa mau lagi kalau kalo jadi karena tapi tolong coba lalu ' +
+    'terus sama bukan aja saja banget sekali dulu tadi nanti besok kemarin gimana bagaimana kenapa siapa kapan dimana').split(' ')
+)
+const findEpStmt = db.prepare(
+  'SELECT e.id, e.text, e.ts_to FROM episodes_fts f JOIN episodes e ON e.id = f.rowid ' +
+  'WHERE episodes_fts MATCH ? AND e.chat = ? ORDER BY bm25(episodes_fts) LIMIT ?'
+)
+export function findEpisodes(chat, query, limit = 3) {
+  const words = [...new Set(String(query).toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [])]
+    .filter((w) => !STOP_WORDS.has(w))
+    .slice(0, 8)
+  if (words.length === 0) return []
+  const q = words.map((w) => (w.length >= 4 ? `"${w}"*` : `"${w}"`)).join(' OR ')
+  try {
+    return findEpStmt.all(q, chat, limit)
+  } catch (e) {
+    return []
+  }
 }
 export function getSummary(chat) {
   return getSum.get(chat)?.summary || ''
@@ -79,11 +173,13 @@ db.exec(`
     UNIQUE(person, fact)
   );
 `)
-const getFactsStmt = db.prepare('SELECT fact FROM facts WHERE person = ? ORDER BY id DESC LIMIT ?')
+const factCols = db.prepare('PRAGMA table_info(facts)').all().map((c) => c.name)
+if (factCols.includes('archived') === false) db.exec('ALTER TABLE facts ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
+const getFactsStmt = db.prepare('SELECT fact FROM facts WHERE person = ? AND archived = 0 ORDER BY id DESC LIMIT ?')
 const addFactStmt = db.prepare('INSERT OR IGNORE INTO facts (person, fact, ts) VALUES (?, ?, ?)')
 const trimFactsStmt = db.prepare(
-  'DELETE FROM facts WHERE person = ? AND id NOT IN ' +
-  '(SELECT id FROM facts WHERE person = ? ORDER BY id DESC LIMIT ?)'
+  'UPDATE facts SET archived = 1 WHERE person = ? AND archived = 0 AND id NOT IN ' +
+  '(SELECT id FROM facts WHERE person = ? AND archived = 0 ORDER BY id DESC LIMIT ?)'
 )
 const delFactsStmt = db.prepare('DELETE FROM facts WHERE person = ?')
 
