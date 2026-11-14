@@ -81,7 +81,9 @@ Yurishy also knows these things:
 
 - Chat memory is saved in SQLite.
   In a group, each person has their own memory.
-  Old messages are turned into a short summary, and short facts about each person are saved.
+  Old messages are moved to an archive. They are also turned into a short summary and into memory cards (a short note with keywords).
+  Short facts about each person are saved too.
+  When you ask something, the bot looks for cards that match your message and gives the best ones to the AI.
   Yurishy also has a small notebook about herself. Everything stays in `bot.db` on the owner's laptop.
 - Yurishy calls people by their WhatsApp name.
 - Yurishy's personality is in `persona.md`.
@@ -199,7 +201,9 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
 - The free plans of AI services can change their rules and limits at any time.
   Read their current terms before you use this bot for other people.
 - The bot logs only command names, tag IDs, and the AI model name, not the full text of messages.
-- Short summaries of old chats are saved in the local database (bot.db) on the owner's laptop. The !reset command deletes your history and your summary.
+- Old messages, short summaries, and memory cards are saved in the local database (`bot.db`) on the owner's laptop.
+  The memory cards that match your message are sent to the AI together with your message.
+  The `!reset` command deletes your messages, your old-message archive, your summary, and your cards.
 - Short facts about each person (for example a nickname or a hobby) are also saved in the local database. The !forget command deletes the facts about you.
 - Yurishy also keeps a small notebook about herself. It does not hold names or private facts about people. The owner can read and change it.
 - To answer, your messages can be sent to AI providers: Groq, Google Gemini, Cloudflare Workers AI, and OpenRouter. The free plans of some providers may keep your messages or use them to improve their products. Do not send private or sensitive information.
@@ -209,9 +213,17 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
 - For the weather, the bot asks Open-Meteo. It sends only the coordinates of the place, not your messages.
 - Yurishy can tell anyone the temperature and the battery status of the laptop.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
+  `bot.db` has the chats of other people (old messages, summaries, cards, and facts). It is never uploaded to GitHub.
+  This is also true for the files `bot.db-wal` and `bot.db-shm`.
+  The file `db.js` is only code. It has the table structure and no chat data.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
   The bot only answers commands, tags, replies, and private chats. Do not use it for spam or bulk messages.
+
+## Help
+
+If you need help, or you want me to delete your data, send me an email: hagurerinze@gmail.com
+Please do not send chat logs, `bot.db`, or `.env` in the email.
 
 ## License
 
