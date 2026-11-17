@@ -1,6 +1,7 @@
-// Kondisi laptop tempat bot berjalan: suhu, baterai, charger, beban, RAM, uptime
+// Kondisi laptop tempat bot berjalan: suhu, penyimpanan, baterai, charger, beban, RAM, uptime
 import fs from 'fs'
 import os from 'os'
+import { execFileSync } from 'child_process'
 
 function read(p) {
   try {
@@ -8,6 +9,33 @@ function read(p) {
   } catch {
     return null
   }
+}
+
+let hddCache = { at: 0, text: '' }
+function hddTemp() {
+  if (Date.now() - hddCache.at < 60000) return hddCache.text
+  let text = 'suhu HDD tidak diketahui'
+  try {
+    let out = ''
+    try {
+      out = execFileSync('sudo', ['-n', '/usr/sbin/smartctl', '-n', 'standby', '-A', '/dev/sda'], {
+        encoding: 'utf8',
+        timeout: 4000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+    } catch (e) {
+      out = String(e.stdout || '')
+    }
+    if (/STANDBY/i.test(out)) {
+      text = 'suhu HDD tidak diketahui karena HDD sedang tidur (standby)'
+    } else {
+      const line = out.split('\n').find((l) => /^\s*194\s/.test(l))
+      const v = line ? Number(line.trim().split(/\s+/)[9]) : NaN
+      if (v > 0 && v < 100) text = `suhu HDD ${v}°C`
+    }
+  } catch {}
+  hddCache = { at: Date.now(), text }
+  return text
 }
 
 export function getSelfStatus() {
@@ -49,6 +77,20 @@ export function getSelfStatus() {
   }
   if (ac !== null) parts.push(`charger ${ac ? 'terpasang' : 'tidak terpasang'}`)
 
+  try {
+    const disks = []
+    for (const [mp, label] of [['/', 'root'], ['/home', 'home']]) {
+      const f = fs.statfsSync(mp)
+      const G = 1024 ** 3
+      const total = f.blocks * f.bsize
+      const avail = f.bavail * f.bsize
+      const used = total - f.bfree * f.bsize
+      const pct = Math.round((used / (used + avail)) * 100)
+      disks.push(`${label} ${(used / G).toFixed(0)} dari ${(total / G).toFixed(0)} GB terpakai (${pct}%, sisa ${(avail / G).toFixed(0)} GB)`)
+    }
+    parts.push(`penyimpanan: ${disks.join('; ')}`)
+  } catch {}
+  parts.push(hddTemp())
   parts.push(`beban ${os.loadavg()[0].toFixed(2)}`)
   try {
     const mi = fs.readFileSync('/proc/meminfo', 'utf8')
