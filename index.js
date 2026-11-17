@@ -209,7 +209,8 @@ async function start() {
 
     const ctx =
       m.message.extendedTextMessage?.contextInfo ||
-      m.message.imageMessage?.contextInfo
+      m.message.imageMessage?.contextInfo ||
+      m.message.stickerMessage?.contextInfo
     const mentioned = (ctx?.mentionedJid || []).map(jidNormalizedUser)
     const me = [sock.user?.id, sock.user?.lid].filter(Boolean).map(jidNormalizedUser)
     const isMentioned = mentioned.some((j) => me.includes(j))
@@ -220,11 +221,13 @@ async function start() {
     const isDM = /@(s\.whatsapp\.net|lid)$/.test(m.key.remoteJid)
     const qm = ctx?.quotedMessage
     const quotedText = (
-      qm?.conversation || qm?.extendedTextMessage?.text || qm?.imageMessage?.caption || ''
+      qm?.conversation || qm?.extendedTextMessage?.text || qm?.imageMessage?.caption || (qm?.stickerMessage ? '[stiker]' : '')
     ).trim()
     if (!text.startsWith('!') && text.trim() && (isMentioned || isReplyToBot || isDM)) {
       text = '!ai ' + text.replace(/@\d+/g, '').trim()
     }
+    const isSticker = Boolean(m.message.stickerMessage)
+    if (isSticker && (isReplyToBot || isDM)) text = '!ai (mengirim stiker)'
 
     const jid = m.key.remoteJid
     const sender = m.key.participant || m.key.remoteJid
@@ -422,13 +425,27 @@ async function start() {
             mime: m.message.imageMessage.mimetype || 'image/jpeg',
             data: buf.toString('base64'),
           }
+        } else if (isSticker) {
+          const sbuf = await downloadMediaMessage(m, 'buffer', {}, {
+            logger: pino({ level: 'silent' }),
+            reuploadRequest: sock.updateMediaMessage,
+          })
+          if (sbuf.length <= 1024 * 1024) image = { mime: 'image/webp', data: sbuf.toString('base64') }
         }
         const qctx = quotedText
           ? `[membalas pesan ${isReplyToBot ? 'Yurishy' : 'orang lain'}: "${quotedText.slice(0, 300)}"] `
           : ''
-        const stored = image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
+        const stored = isSticker ? `[stiker] ${qctx}`.trim() : image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const answer = await askGemini(history, image, who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, memories })
+        const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, memories }]
+        let answer
+        try {
+          answer = await askGemini(history, image, ...askArgs)
+        } catch (e) {
+          if (isSticker === false) throw e
+          const blind = [...getHistory(key, 9), { role: 'user', content: `${qctx}(mengirim stiker, tapi isinya tidak bisa kamu lihat sekarang)` }]
+          answer = await askGemini(blind, undefined, ...askArgs)
+        }
         const todoNote = todoMode ? applyTodoMarks(sender, todoMarks) : ''
         const finalText = [answer, todoNote].filter(Boolean).join('\n\n')
         if (!finalText) throw new Error('jawaban kosong')
