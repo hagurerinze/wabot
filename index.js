@@ -11,7 +11,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent, saveGroups, pendingOutbox, markOutbox } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
@@ -163,6 +163,9 @@ async function compactChat(key, person) {
   }
 }
 
+let outboxTimer = null
+let groupsTimer = null
+
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
   const { version } = await fetchLatestBaileysVersion()
@@ -184,7 +187,45 @@ async function start() {
   sock.ev.on('creds.update', saveCreds)
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
-    if (connection === 'open') console.log('Bot terhubung')
+    if (connection === 'open') {
+      console.log('Bot terhubung')
+      const refreshGroups = async () => {
+        try {
+          const all = await sock.groupFetchAllParticipating()
+          saveGroups(Object.values(all).map((g) => ({ jid: g.id, name: g.subject || g.id })))
+        } catch (e) {
+          console.error('daftar grup:', e.message)
+        }
+      }
+      refreshGroups()
+      clearInterval(groupsTimer)
+      groupsTimer = setInterval(refreshGroups, 30 * 60 * 1000)
+      clearInterval(outboxTimer)
+      let outboxBusy = false
+      outboxTimer = setInterval(async () => {
+        if (outboxBusy) return
+        outboxBusy = true
+        try {
+          for (const row of pendingOutbox()) {
+            try {
+              await sock.sendMessage(row.jid, { text: row.text })
+              markOutbox(row.id, 'sent')
+              console.log('kotak keluar: terkirim ke', row.jid)
+            } catch (e) {
+              markOutbox(row.id, row.attempts + 1 >= 3 ? 'failed' : 'pending', e.message)
+              console.error('kotak keluar gagal:', e.message)
+            }
+            await new Promise((r) => setTimeout(r, 1500))
+          }
+        } finally {
+          outboxBusy = false
+        }
+      }, 3000)
+    }
+    if (connection === 'close') {
+      clearInterval(outboxTimer)
+      clearInterval(groupsTimer)
+    }
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
       if (code !== DisconnectReason.loggedOut) {

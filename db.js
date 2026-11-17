@@ -343,3 +343,50 @@ export function saveSent(ids, chat, toSender, toName, question) {
 export function findSent(id) {
   return getSent.get(String(id)) || null
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS groups_cache (
+    jid TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    ts INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    jid TEXT NOT NULL,
+    text TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    error TEXT
+  );
+`)
+const delGroups = db.prepare('DELETE FROM groups_cache')
+const insGroup = db.prepare('INSERT OR REPLACE INTO groups_cache (jid, name, ts) VALUES (?, ?, ?)')
+const allGroups = db.prepare('SELECT jid, name FROM groups_cache ORDER BY name COLLATE NOCASE')
+const insOut = db.prepare('INSERT INTO outbox (jid, text, ts) VALUES (?, ?, ?)')
+const pendOut = db.prepare("SELECT id, jid, text, attempts FROM outbox WHERE status = 'pending' ORDER BY id LIMIT 10")
+const pruneOut = db.prepare("DELETE FROM outbox WHERE status != 'pending' AND ts < ?")
+const markOut = db.prepare('UPDATE outbox SET status = ?, attempts = attempts + 1, error = ? WHERE id = ?')
+
+export const saveGroups = db.transaction((list) => {
+  delGroups.run()
+  const now = Date.now()
+  for (const g of list) insGroup.run(g.jid, String(g.name).slice(0, 120), now)
+})
+
+export function listGroups() {
+  return allGroups.all()
+}
+
+export function queueOutbox(jid, text) {
+  return insOut.run(jid, String(text).slice(0, 1000), Date.now()).lastInsertRowid
+}
+
+export function pendingOutbox() {
+  pruneOut.run(Date.now() - 24 * 3600 * 1000)
+  return pendOut.all()
+}
+
+export function markOutbox(id, status, error) {
+  markOut.run(status, error ? String(error).slice(0, 200) : null, id)
+}
