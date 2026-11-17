@@ -64,16 +64,27 @@ Yurishy also knows these things:
 - The weather, when the message has a word like "cuaca" or "hujan".
   The bot gets it from [Open-Meteo](https://open-meteo.com/). It is free and needs no key.
   The default place is Medan. The answer is saved for 15 minutes.
-- The status of her laptop (CPU temperature, battery, charger, load, RAM, uptime),
-  when the message has a word like "suhu" or "baterai".
+- The status of her laptop (CPU temperature, disk space, HDD temperature, battery, charger, load, RAM, uptime),
+  when the message has a word like "suhu", "baterai", "storage", or "hdd".
   If the battery shows 0%, the bot tells the AI that the battery is broken, so Yurishy does not worry.
+  The disk space is read with Node.js, and it does not wake the disk.
+  The HDD temperature is read with `smartctl -n standby`. If the HDD is sleeping, the bot skips it and does not wake the disk.
+  It needs one `sudoers` rule for this exact command only (change `YOUR_USER` and the disk name):
+
+  ```
+  YOUR_USER ALL=(root) NOPASSWD: /usr/sbin/smartctl -n standby -A /dev/sda
+  ```
+
+  Without this rule the bot still works. Yurishy only says the HDD temperature is unknown.
+  The result is saved for 1 minute.
 
 ## How the AI works
 
 - The bot tries the models in `AI_CHAIN`, from the first to the last.
   If one model is slow, full, or has an error, the bot tries the next one.
-- My main choice is Groq because it is fast. Gemini is the backup. Cloudflare Workers AI and OpenRouter are the last backups.
-- Messages with a photo go to Gemini, because the other providers I use only read text.
+- The order is set in `AI_CHAIN`. My order now is Gemini, Cloudflare Workers AI, OpenRouter, and then Groq.
+- Messages with a photo or a sticker go to Gemini, because the other providers I use only read text.
+  If Gemini fails on a sticker, Yurishy is told that she cannot see it, and she says so.
 - The bot gives up after about 25 seconds in total.
 - The bot logs which model answered and how long it took. It does not log the message text.
 
@@ -89,6 +100,12 @@ Yurishy also knows these things:
 - Yurishy's personality is in `persona.md`.
   When you change this file, the change works at once. You do not need to restart.
 - Yurishy says honestly that she is a bot if someone asks seriously.
+- Yurishy can ask a question back, but only when she has a reason.
+- Yurishy can split one answer into up to 3 short messages. She waits a little between them and shows "typing".
+- Yurishy can read stickers and answer with text. This works in a private chat, and in a group when the sticker is a reply to her message.
+  A sticker sent in a group without replying to her is ignored. She cannot send stickers.
+- In a group, when another person replies to one of her messages, she knows who that message was first for.
+  So she does not mix the two people. The bot saves this for 7 days.
 
 ## Requirements
 
@@ -200,7 +217,7 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
   `!reset` deletes your own chat memory.
 - The free plans of AI services can change their rules and limits at any time.
   Read their current terms before you use this bot for other people.
-- The bot logs only command names, tag IDs, and the AI model name, not the full text of messages.
+- The bot logs only command names, sender IDs, tag IDs, and the AI model name, not the full text of messages.
 - Old messages, short summaries, and memory cards are saved in the local database (`bot.db`) on the owner's laptop.
   The memory cards that match your message are sent to the AI together with your message.
   The `!reset` command deletes your messages, your old-message archive, your summary, and your cards.
@@ -211,7 +228,10 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
   But when you write about your todos in a normal chat, that message is sent to AI like any other message.
 - In a group, if you ask for your todo list, everyone in the group can read it.
 - For the weather, the bot asks Open-Meteo. It sends only the coordinates of the place, not your messages.
-- Yurishy can tell anyone the temperature and the battery status of the laptop.
+- Yurishy can tell anyone the temperature, the disk space, and the battery status of the laptop.
+- In a group, the bot saves for 7 days the ID of each message Yurishy sends, who it was for, and the first 120 letters of the question.
+  This is only to know who she was talking to when another person replies. It is in `bot.db` and it is never uploaded.
+- A sticker is sent to Gemini so she can see it. The sticker is not saved. Only the word "[stiker]" is saved in the chat memory.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
   `bot.db` has the chats of other people (old messages, summaries, cards, and facts). It is never uploaded to GitHub.
   This is also true for the files `bot.db-wal` and `bot.db-shm`.
