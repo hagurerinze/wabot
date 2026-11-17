@@ -235,6 +235,22 @@ async function start() {
     const key = jid.endsWith('@g.us') ? `${jid}|${sender}` : jid
 
     const reply = (t) => sock.sendMessage(jid, { text: t }, { quoted: m })
+    const replyMulti = async (t) => {
+      let parts = String(t || '')
+        .split(/^\s*\[next\]\s*$/gim)
+        .map((x) => x.replace(/\[next\]/gi, '').trim())
+        .filter(Boolean)
+      if (parts.length > 3) parts = [...parts.slice(0, 2), parts.slice(2).join('\n')]
+      if (parts.length <= 1) return reply(parts[0] || String(t || '').replace(/\[next\]/gi, '').trim() || '...')
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) {
+          try { await sock.sendPresenceUpdate('composing', jid) } catch {}
+          await new Promise((r) => setTimeout(r, Math.min(2000, 600 + parts[i].length * 30)))
+        }
+        await sock.sendMessage(jid, { text: parts[i] }, i === 0 ? { quoted: m } : undefined)
+      }
+      try { await sock.sendPresenceUpdate('paused', jid) } catch {}
+    }
 
     if (text === '!ping') {
       await reply('pong')
@@ -417,8 +433,8 @@ async function start() {
         const finalText = [answer, todoNote].filter(Boolean).join('\n\n')
         if (!finalText) throw new Error('jawaban kosong')
         saveMessage(key, 'user', stored)
-        saveMessage(key, 'model', answer || '(todo diproses)')
-        await reply(finalText)
+        saveMessage(key, 'model', String(answer || '').replace(/\s*\[next\]\s*/gi, '\n\n').trim() || '(todo diproses)')
+        await replyMulti(finalText)
         compactChat(key, sender)
       } catch (e) {
         console.error(e.message)
