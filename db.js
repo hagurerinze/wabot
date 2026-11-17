@@ -317,3 +317,29 @@ export function removeTodos(person, nums) {
 export function clearTodos(person) {
   db.prepare('DELETE FROM todos WHERE person = ?').run(person)
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sent_msgs (
+    id TEXT PRIMARY KEY,
+    chat TEXT NOT NULL,
+    to_sender TEXT NOT NULL,
+    to_name TEXT NOT NULL,
+    question TEXT,
+    ts INTEGER NOT NULL
+  );
+`)
+const insSent = db.prepare(
+  'INSERT OR REPLACE INTO sent_msgs (id, chat, to_sender, to_name, question, ts) VALUES (?, ?, ?, ?, ?, ?)'
+)
+const getSent = db.prepare('SELECT to_sender, to_name, question FROM sent_msgs WHERE id = ?')
+const pruneSent = db.prepare('DELETE FROM sent_msgs WHERE ts < ?')
+
+export function saveSent(ids, chat, toSender, toName, question) {
+  const now = Date.now()
+  for (const id of ids || []) insSent.run(String(id), chat, toSender, toName, question || '', now)
+  pruneSent.run(now - 7 * 24 * 3600 * 1000)
+}
+
+export function findSent(id) {
+  return getSent.get(String(id)) || null
+}

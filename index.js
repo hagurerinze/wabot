@@ -11,7 +11,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
@@ -244,15 +244,21 @@ async function start() {
         .map((x) => x.replace(/\[next\]/gi, '').trim())
         .filter(Boolean)
       if (parts.length > 3) parts = [...parts.slice(0, 2), parts.slice(2).join('\n')]
-      if (parts.length <= 1) return reply(parts[0] || String(t || '').replace(/\[next\]/gi, '').trim() || '...')
+      if (parts.length <= 1) {
+        const r1 = await reply(parts[0] || String(t || '').replace(/\[next\]/gi, '').trim() || '...')
+        return r1?.key?.id ? [r1.key.id] : []
+      }
+      const ids = []
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) {
           try { await sock.sendPresenceUpdate('composing', jid) } catch {}
           await new Promise((r) => setTimeout(r, Math.min(2000, 600 + parts[i].length * 30)))
         }
-        await sock.sendMessage(jid, { text: parts[i] }, i === 0 ? { quoted: m } : undefined)
+        const ri = await sock.sendMessage(jid, { text: parts[i] }, i === 0 ? { quoted: m } : undefined)
+        if (ri?.key?.id) ids.push(ri.key.id)
       }
       try { await sock.sendPresenceUpdate('paused', jid) } catch {}
+      return ids
     }
 
     if (text === '!ping') {
@@ -432,8 +438,13 @@ async function start() {
           })
           if (sbuf.length <= 1024 * 1024) image = { mime: 'image/webp', data: sbuf.toString('base64') }
         }
+        const rec = isReplyToBot && ctx?.stanzaId && jid.endsWith('@g.us') ? findSent(ctx.stanzaId) : null
+        const lintas = Boolean(rec) && rec.to_sender !== sender
+        if (lintas) console.log('reply lintas orang:', rec.to_name, '<-', sender)
         const qctx = quotedText
-          ? `[membalas pesan ${isReplyToBot ? 'Yurishy' : 'orang lain'}: "${quotedText.slice(0, 300)}"] `
+          ? lintas
+            ? `[membalas pesan Yurishy yang tadinya jawaban untuk ${rec.to_name}${rec.question ? ` (soal: "${rec.question}")` : ''}, bukan untuk orang yang sedang bicara sekarang: "${quotedText.slice(0, 300)}"] `
+            : `[membalas pesan ${isReplyToBot ? 'Yurishy' : 'orang lain'}: "${quotedText.slice(0, 300)}"] `
           : ''
         const stored = isSticker ? `[stiker] ${qctx}`.trim() : image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
@@ -451,7 +462,14 @@ async function start() {
         if (!finalText) throw new Error('jawaban kosong')
         saveMessage(key, 'user', stored)
         saveMessage(key, 'model', String(answer || '').replace(/\s*\[next\]\s*/gi, '\n\n').trim() || '(todo diproses)')
-        await replyMulti(finalText)
+        const sentIds = await replyMulti(finalText)
+        if (jid.endsWith('@g.us')) {
+          try {
+            saveSent(sentIds, jid, sender, String(who).replace(/\s*\(.*?\)\s*$/, '').trim() || 'seseorang', String(q).slice(0, 120))
+          } catch (e) {
+            console.error('catat pesan terkirim:', e.message)
+          }
+        }
         compactChat(key, sender)
       } catch (e) {
         console.error(e.message)
