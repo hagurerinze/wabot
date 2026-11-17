@@ -218,6 +218,9 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
 - The free plans of AI services can change their rules and limits at any time.
   Read their current terms before you use this bot for other people.
 - The bot logs only command names, sender IDs, tag IDs, and the AI model name, not the full text of messages.
+  One more log line is written in a group when a person replies to a message that Yurishy first sent to another person.
+  It shows the WhatsApp display name of the first person and the ID of the person who replied.
+  Logs stay on the owner's laptop.
 - Old messages, short summaries, and memory cards are saved in the local database (`bot.db`) on the owner's laptop.
   The memory cards that match your message are sent to the AI together with your message.
   The `!reset` command deletes your messages, your old-message archive, your summary, and your cards.
