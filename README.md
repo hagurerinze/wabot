@@ -97,6 +97,8 @@ Yurishy also knows these things:
   When you ask something, the bot looks for cards that match your message and gives the best ones to the AI.
   Yurishy also has a small notebook about herself. Everything stays in `bot.db` on the owner's laptop.
 - Yurishy calls people by their WhatsApp name.
+- Yurishy can read who is tagged in a message. Her own tag is removed. A tag to another person becomes `@Name`.
+  She only knows the name of a person who already wrote a message while the bot was running. For other people she reads `@seseorang`.
 - Yurishy's personality is in `persona.md`.
   When you change this file, the change works at once. You do not need to restart.
 - Yurishy says honestly that she is a bot if someone asks seriously.
@@ -208,6 +210,10 @@ After you change the code or `.env`, use `botrestart`.
 - `botmem notes` - read Yurishy's own notebook and its versions
 - `botmem editnotes`, `revert` - change the notebook or go back to an old version
 - `botmem proposals` - read the persona ideas that Yurishy suggests
+- `botsay` - list the groups that Yurishy knows
+- `botsay <number or part of the name> [message]` - send a message to a group.
+  Yurishy sends your exact words, and the AI is not used. If you leave the message empty, the bot asks you to type it.
+  The bot shows the group and the message, and asks you to confirm with `y`. The message is sent from the bot's number, and the bot must be running.
 
 The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and private chats). It does not save other WhatsApp messages.
 
@@ -235,13 +241,18 @@ The bot only saves chats with the AI (`!ai`, tags, replies to the bot, and priva
 - In a group, the bot saves for 7 days the ID of each message Yurishy sends, who it was for, and the first 120 letters of the question.
   This is only to know who she was talking to when another person replies. It is in `bot.db` and it is never uploaded.
 - A sticker is sent to Gemini so she can see it. The sticker is not saved. Only the word "[stiker]" is saved in the chat memory.
+- The bot saves the WhatsApp display name of each person who writes to it, for 90 days, in the table `contact_names`.
+  This is only to read tags. It is in `bot.db` and it is never uploaded.
+- The names of the groups that the bot is in are saved in `groups_cache`, and the list is updated every 30 minutes.
+  A message from `botsay` waits in the table `outbox` for a few seconds until the bot sends it. Messages that are done are deleted after 1 day.
 - Never upload `.env`, `auth/`, or `bot.db`. They are in `.gitignore`.
   `bot.db` has the chats of other people (old messages, summaries, cards, and facts). It is never uploaded to GitHub.
   This is also true for the files `bot.db-wal` and `bot.db-shm`.
   The file `db.js` is only code. It has the table structure and no chat data.
 - This bot uses an unofficial WhatsApp library.
   Your account can be restricted. Use a spare number.
-  The bot only answers commands, tags, replies, and private chats. Do not use it for spam or bulk messages.
+  The bot only answers commands, tags, replies, and private chats. The only other messages are the ones the owner sends by hand with `botsay`.
+  Do not use it for spam or bulk messages.
 
 ## Help
 
