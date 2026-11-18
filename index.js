@@ -15,6 +15,7 @@ import { saveMessage, getHistory, clearHistory, countMessages, getOldest, delete
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
+import { readLink, findLinks } from './webfetch.js'
 const SELF_WORD = /(?:(?:\b(?:suhu|panas|baterai|batre|baterei|battery|charger|cpu|ram|uptime|kondisi)\b)|\b(?:hdd|ssd|disk|harddisk|hard disk)\b|storage|penyimpanan|ruang (?:kosong|disk|penyimpanan))|\b(?:cpu|ram|prosesor|processor|spek|spesifikasi)\b/i
 const WEATHER_WORD = /\b(?:cuaca|hujan|gerimis|mendung|payung|weather|suhu|jemur)\b/i
 
@@ -509,7 +510,24 @@ async function start() {
           : ''
         const stored = isSticker ? `[stiker] ${qctx}`.trim() : image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
-        const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, memories }]
+        const linkMode = (process.env.LINK_READER || 'owner').toLowerCase()
+        const urls = linkMode === 'off' ? [] : findLinks(q)
+        let links = []
+        if (urls.length) {
+          const okUser =
+            linkMode === 'all'
+              ? allow(`link:${sender}`, 5, 3600000) && allow('link:all', 100, 86400000)
+              : linkMode === 'owner' && isOwner
+          if (okUser) {
+            try { await sock.sendPresenceUpdate('composing', jid) } catch {}
+            const got = await Promise.all(urls.map((u) => readLink(u)))
+            links = got.map((r, i) => (r.ok ? { url: r.url, text: r.text } : { url: urls[i], fail: r.why }))
+            console.log('baca link:', got.map((r) => (r.ok ? 'ok' : r.why)).join(', '))
+          } else {
+            links = urls.map((u) => ({ url: u, fail: 'Yurishy belum diizinkan membuka link untuk orang ini, atau jatahnya habis' }))
+          }
+        }
+        const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, memories, links }]
         let answer
         try {
           answer = await askGemini(history, image, ...askArgs)
