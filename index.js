@@ -15,7 +15,7 @@ import { saveMessage, getHistory, clearHistory, countMessages, getOldest, delete
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
-const SELF_WORD = /(?:\b(?:suhu|panas|baterai|batre|baterei|battery|charger|cpu|ram|uptime|kondisi)\b)|\b(?:hdd|ssd|disk|harddisk|hard disk)\b|storage|penyimpanan|ruang (?:kosong|disk|penyimpanan)/i
+const SELF_WORD = /(?:(?:\b(?:suhu|panas|baterai|batre|baterei|battery|charger|cpu|ram|uptime|kondisi)\b)|\b(?:hdd|ssd|disk|harddisk|hard disk)\b|storage|penyimpanan|ruang (?:kosong|disk|penyimpanan))|\b(?:cpu|ram|prosesor|processor|spek|spesifikasi)\b/i
 const WEATHER_WORD = /\b(?:cuaca|hujan|gerimis|mendung|payung|weather|suhu|jemur)\b/i
 
 // ---- todo lewat obrolan biasa ----

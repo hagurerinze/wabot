@@ -38,8 +38,30 @@ function hddTemp() {
   return text
 }
 
+let specCache = null
+function getSpecs() {
+  if (specCache !== null) return specCache
+  let text = ''
+  try {
+    const cpu = fs.readFileSync('/proc/cpuinfo', 'utf8').match(/^model name\s*:\s*(.+)$/m)
+    if (cpu) {
+      const name = cpu[1].replace(/\((?:R|TM)\)/gi, '').replace(/\s+CPU\b/i, '').replace(/\s{2,}/g, ' ').trim()
+      text += `prosesor ${name} (${os.cpus().length} thread)`
+    }
+  } catch {}
+  try {
+    const mb = Number(fs.readFileSync('/proc/meminfo', 'utf8').match(/MemTotal:\s+(\d+)/)[1]) / 1024
+    const gb = (Math.ceil(mb / 512) * 512) / 1024
+    text += `${text ? ', ' : ''}RAM total sekitar ${gb} GB (terbaca ${Math.round(mb)} MB oleh sistem)`
+  } catch {}
+  specCache = text
+  return specCache
+}
+
 export function getSelfStatus() {
   const parts = []
+  const specs = getSpecs()
+  if (specs) parts.push('spesifikasi: ' + specs)
 
   let tempPath = '/sys/class/thermal/thermal_zone0/temp'
   try {

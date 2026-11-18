@@ -64,8 +64,8 @@ Yurishy also knows these things:
 - The weather, when the message has a word like "cuaca" or "hujan".
   The bot gets it from [Open-Meteo](https://open-meteo.com/). It is free and needs no key.
   The default place is Medan. The answer is saved for 15 minutes.
-- The status of her laptop (CPU temperature, disk space, HDD temperature, battery, charger, load, RAM, uptime),
-  when the message has a word like "suhu", "baterai", "storage", or "hdd".
+- The status of her laptop (processor, total RAM, CPU temperature, disk space, HDD temperature, battery, charger, load, RAM use, uptime),
+  when the message has a word like "suhu", "baterai", "storage", "hdd", or "spek".
   If the battery shows 0%, the bot tells the AI that the battery is broken, so Yurishy does not worry.
   The disk space is read with Node.js, and it does not wake the disk.
   The HDD temperature is read with `smartctl -n standby`. If the HDD is sleeping, the bot skips it and does not wake the disk.
