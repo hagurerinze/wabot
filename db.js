@@ -390,3 +390,33 @@ export function pendingOutbox() {
 export function markOutbox(id, status, error) {
   markOut.run(status, error ? String(error).slice(0, 200) : null, id)
 }
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS contact_names (
+    jid TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    ts INTEGER NOT NULL
+  );
+`)
+const insName = db.prepare('INSERT OR REPLACE INTO contact_names (jid, name, ts) VALUES (?, ?, ?)')
+const getNameRow = db.prepare('SELECT name, ts FROM contact_names WHERE jid = ?')
+db.prepare('DELETE FROM contact_names WHERE ts < ?').run(Date.now() - 90 * 24 * 3600 * 1000)
+
+export function saveName(jids, name) {
+  const now = Date.now()
+  const nm = String(name).slice(0, 60)
+  for (const j of jids) {
+    const row = getNameRow.get(j)
+    if (row && row.name === nm && now - row.ts < 24 * 3600 * 1000) continue
+    insName.run(j, nm, now)
+  }
+}
+
+export function getNames(jids) {
+  const out = new Map()
+  for (const j of jids) {
+    const row = getNameRow.get(j)
+    if (row) out.set(j, row.name)
+  }
+  return out
+}

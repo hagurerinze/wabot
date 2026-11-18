@@ -11,7 +11,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent, saveGroups, pendingOutbox, markOutbox } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent, saveGroups, pendingOutbox, markOutbox, saveName, getNames } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
@@ -260,12 +260,23 @@ async function start() {
     const quotedFrom = ctx?.participant ? jidNormalizedUser(ctx.participant) : ''
     const isReplyToBot = !!quotedFrom && me.includes(quotedFrom)
     const isDM = /@(s\.whatsapp\.net|lid)$/.test(m.key.remoteJid)
+    const resolveTags = (t) => {
+      const names = getNames(mentioned)
+      return t
+        .replace(/@(\d+)/g, (full, num) => {
+          const j = mentioned.find((x) => x.split('@')[0].split(':')[0] === num)
+          if (!j || me.includes(j)) return ''
+          return '@' + (names.get(j) || 'seseorang')
+        })
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim()
+    }
     const qm = ctx?.quotedMessage
     const quotedText = (
       qm?.conversation || qm?.extendedTextMessage?.text || qm?.imageMessage?.caption || (qm?.stickerMessage ? '[stiker]' : '')
     ).trim()
     if (!text.startsWith('!') && text.trim() && (isMentioned || isReplyToBot || isDM)) {
-      text = '!ai ' + text.replace(/@\d+/g, '').trim()
+      text = '!ai ' + text.trim()
     }
     const isSticker = Boolean(m.message.stickerMessage)
     if (isSticker && (isReplyToBot || isDM)) text = '!ai (mengirim stiker)'
@@ -273,6 +284,15 @@ async function start() {
     const jid = m.key.remoteJid
     const sender = m.key.participant || m.key.remoteJid
     if (BLOCKED.includes(sender)) return
+    try {
+      const nm = OWNER && sender === OWNER ? 'Hagure' : cleanName(m.pushName)
+      if (nm && !sender.endsWith('@g.us')) {
+        const js = [sender, m.key.participantAlt, m.key.remoteJidAlt].filter(Boolean).map(jidNormalizedUser)
+        saveName(js, nm)
+      }
+    } catch (e) {
+      console.error('simpan nama:', e.message)
+    }
     if (text.startsWith('!')) console.log('cmd:', text.split(' ')[0], '| dari:', sender)
     const isOwner = OWNER && sender === OWNER
     // di grup, riwayat dipisah per orang
@@ -433,7 +453,7 @@ async function start() {
         if (!allow(`aid:${sender}`, 50, 86400000)) return reply('Jatah AI-mu hari ini habis, coba lagi besok.')
         if (!allow('ai:all', 300, 86400000)) return reply('Jatah AI hari ini habis untuk semua orang, coba lagi besok.')
       }
-      const q = text.slice(4).trim()
+      const q = resolveTags(text.slice(4).trim())
       if (!q) return reply('Contoh: !ai apa itu Debian?')
       const who = isOwner
           ? 'Hagure (pemilikmu)'
