@@ -227,7 +227,7 @@ export function saveSelfNotes(body, reason) {
   trimNotes.run()
 }
 const decidedProps = db.prepare(
-  "SELECT text, status, reason FROM proposals WHERE status IN ('selesai', 'ditolak') ORDER BY COALESCE(decided_ts, ts) DESC LIMIT 20"
+  "SELECT text, status, reason FROM proposals WHERE status IN ('selesai', 'ditolak') ORDER BY COALESCE(decided_ts, ts) DESC LIMIT 40"
 )
 const waitingProps = db.prepare("SELECT text FROM proposals WHERE status = 'baru' ORDER BY id")
 export function getProposalDecisions() {
