@@ -11,7 +11,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent, saveGroups, pendingOutbox, markOutbox, saveName, getNames } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent, saveGroups, pendingOutbox, markOutbox, saveName, getNames, TODO_MAX } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
@@ -37,7 +37,7 @@ function applyTodoMarks(sender, marks) {
     const r = addTodos(sender, picked)
     if (r.added > 0) out.push(`Kucatat: ${picked.join('; ')}.`)
     if (r.dup > 0) out.push(`${r.dup} sudah ada.`)
-    if (r.full > 0) out.push(`${r.full} tidak muat, batasnya 30 yang terbuka.`)
+    if (r.full > 0) out.push(`${r.full} tidak muat, batasnya ${TODO_MAX} yang terbuka.`)
     if (adds.length > picked.length) out.push('Maksimal 10 per pesan, sisanya belum kucatat.')
     if (r.added > 0) out.push(`Total ${r.total} yang terbuka.`)
   }
@@ -72,7 +72,7 @@ function todoDirect(sender, q) {
       : 'Kosong. Lagi nggak ada kerjaan, atau lupa nulis?'
   }
   if (/\b(?:to-?do|to do)\b[^\d]{0,15}\d/i.test(q) && TODO_DONE_WORD.test(q) && !TODO_ADD_VERB.test(q)) {
-    const nums = (q.match(/\d+/g) || []).map(Number).filter((n) => n > 0 && n <= 30)
+    const nums = (q.match(/\d+/g) || []).map(Number).filter((n) => n > 0 && n <= TODO_MAX)
     if (nums.length) return applyTodoMarks(sender, [{ kind: 'DONE', items: nums.map(String) }])
   }
   return null
@@ -363,7 +363,7 @@ async function start() {
         const out = []
         if (r.added > 0) out.push(`Oke, kucatat ${r.added} item.`)
         if (r.dup > 0) out.push(`${r.dup} sudah ada.`)
-        if (r.full > 0) out.push(`${r.full} tidak muat, batasnya 30 yang terbuka.`)
+        if (r.full > 0) out.push(`${r.full} tidak muat, batasnya ${TODO_MAX} yang terbuka.`)
         if (all.length > picked.length) out.push('Maksimal 10 per pesan, sisanya belum kucatat.')
         if (r.added > 0) out.push(`Total ${r.total} yang terbuka.`)
         await reply(out.join(' '))

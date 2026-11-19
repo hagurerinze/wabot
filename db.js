@@ -254,8 +254,10 @@ const addTodoStmt = db.prepare('INSERT INTO todos (person, text, ts) VALUES (?, 
 const openTodosStmt = db.prepare('SELECT id, text FROM todos WHERE person = ? AND done = 0 ORDER BY id')
 const doneTodoStmt = db.prepare('UPDATE todos SET done = 1, done_ts = ? WHERE id = ?')
 const delTodoStmt = db.prepare('DELETE FROM todos WHERE id = ?')
+export const TODO_MAX = 100
+
 export function addTodo(person, text) {
-  if (openTodosStmt.all(person).length >= 30) return false
+  if (openTodosStmt.all(person).length >= TODO_MAX) return false
   addTodoStmt.run(person, text, Date.now())
   return true
 }
@@ -284,7 +286,7 @@ export function addTodos(person, items) {
   for (const t of items) {
     if (have.has(t.toLowerCase())) {
       dup++
-    } else if (open.length + added >= 30) {
+    } else if (open.length + added >= TODO_MAX) {
       full++
     } else {
       addTodoStmt.run(person, t, Date.now())
