@@ -4,12 +4,13 @@ import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs'
+import { createInterface } from 'node:readline/promises'
 
 const dbPath = fileURLToPath(new URL('./bot.db', import.meta.url))
 const [cmd = 'overview', arg] = process.argv.slice(2)
 const reasonText = process.argv.slice(4).join(' ').trim()
 const editReason = process.argv.slice(3).join(' ').trim()
-const writing = ['delfact', 'delperson', 'editfact', 'editsummary', 'addfact', 'renumber', 'editnotes', 'revert', 'doneproposal', 'rejectproposal', 'delproposal'].includes(cmd)
+const writing = ['delfact', 'delperson', 'editfact', 'editsummary', 'addfact', 'renumber', 'editnotes', 'revert', 'doneproposal', 'rejectproposal', 'delproposal', 'editepisode', 'delepisode'].includes(cmd)
 const db = new Database(dbPath, { readonly: writing === false, fileMustExist: true })
 
 const short = (s, n = 70) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n)
@@ -33,6 +34,10 @@ botmem delfact <id>        hapus satu fakta
 botmem delperson <id>      hapus semua fakta satu orang (id lengkap)
 botmem editfact <id> <teks>   ganti teks satu fakta
 botmem editsummary <chat>  ubah ringkasan di editor teks
+botmem episodes [chat]     daftar kartu memori (kata kunci + potongan isi)
+botmem episode <nomor>     tampilkan satu kartu utuh
+botmem editepisode <nomor> ubah kata kunci dan isi kartu di editor teks
+botmem delepisode <nomor>  hapus satu kartu (ada konfirmasi)
 botmem addfact <orang> <teks>   tambah fakta manual
 botmem renumber            susun ulang id fakta mulai dari 1
 botmem notes [versi]       catatan pribadi Yurishy + riwayat versi
@@ -156,6 +161,83 @@ if (cmd === 'overview') {
         db.prepare('update summaries set summary = ?, ts = ? where chat = ?').run(edited, Date.now(), rows[0].chat)
         console.log('Ringkasan diperbarui.')
       }
+    }
+  }
+} else if (cmd === 'episodes') {
+  const rows = db
+    .prepare('select id, chat, kind, tags, text, ts_to from episodes where chat like ? order by ts_to desc, id desc limit 30')
+    .all(like(arg))
+  const total = db.prepare('select count(*) as n from episodes where chat like ?').get(like(arg)).n
+  if (rows.length === 0) console.log('Belum ada kartu.')
+  for (const r of rows) {
+    console.log(`#${r.id} ${new Date(r.ts_to).toLocaleDateString('id-ID')} [${r.kind}] ${short(r.chat, 36)}`)
+    console.log(`   kata kunci: ${short(r.tags, 60) || '(kosong)'}`)
+    console.log(`   ${short(r.text, 110)}`)
+  }
+  if (total > rows.length) console.log(`\n(${total} kartu cocok, tampil 30 terbaru. Perjelas filternya.)`)
+} else if (cmd === 'episode') {
+  const id = Number(arg)
+  const r = Number.isInteger(id) ? db.prepare('select * from episodes where id = ?').get(id) : null
+  if (!r) {
+    console.log('Kartu tidak ketemu. Lihat daftar: botmem episodes')
+  } else {
+    console.log(`#${r.id} [${r.kind}] chat: ${r.chat}`)
+    console.log(`periode: ${r.ts_from ? fmt(r.ts_from) : '?'} sampai ${fmt(r.ts_to)} | dibuat: ${fmt(r.created_ts)}`)
+    console.log(`kata kunci: ${r.tags || '(kosong)'}\n`)
+    console.log(r.text)
+  }
+} else if (cmd === 'editepisode') {
+  const id = Number(arg)
+  const r = Number.isInteger(id) ? db.prepare('select * from episodes where id = ?').get(id) : null
+  if (!r) {
+    console.log('Kartu tidak ketemu. Lihat daftar: botmem episodes')
+  } else {
+    const file = join(tmpdir(), `botmem-ep-${Date.now()}.txt`)
+    writeFileSync(file, `KATA KUNCI: ${r.tags}\nRINGKASAN: ${r.text}\n`)
+    spawnSync(process.env.EDITOR || process.env.VISUAL || 'nano', [file], { stdio: 'inherit' })
+    const edited = readFileSync(file, 'utf8')
+    unlinkSync(file)
+    const m = edited.match(/^\s*KATA KUNCI:[ \t]*(.*)\r?\n+RINGKASAN:[ \t]*([\s\S]*)$/)
+    if (!m) {
+      console.log('Format berubah (baris "KATA KUNCI:" dan "RINGKASAN:" harus ada), tidak diubah.')
+    } else {
+      const tags = m[1].replace(/[,\s]+/g, ' ').trim().toLowerCase()
+      const text = m[2].trim()
+      if (text === '') {
+        console.log('Isi kosong, tidak diubah.')
+      } else if (text === r.text && tags === r.tags) {
+        console.log('Tidak ada perubahan.')
+      } else {
+        const save = db.transaction(() => {
+          db.prepare('update episodes set text = ?, tags = ? where id = ?').run(text, tags, r.id)
+          db.prepare('delete from episodes_fts where rowid = ?').run(r.id)
+          db.prepare('insert into episodes_fts (rowid, text, tags) values (?, ?, ?)').run(r.id, text, tags)
+        })
+        save()
+        console.log('Kartu diperbarui, indeks pencarian ikut diperbarui.')
+        if (text.length > 600) console.log(`Catatan: isinya ${text.length} huruf, dan yang dikirim ke AI hanya 600 huruf pertama.`)
+      }
+    }
+  }
+} else if (cmd === 'delepisode') {
+  const id = Number(arg)
+  const r = Number.isInteger(id) ? db.prepare('select * from episodes where id = ?').get(id) : null
+  if (!r) {
+    console.log('Kartu tidak ketemu. Lihat daftar: botmem episodes')
+  } else {
+    console.log(`#${r.id} [${r.kind}] ${short(r.chat, 40)}\n   ${short(r.text, 200)}`)
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    const ans = (await rl.question('Hapus kartu ini? Tidak bisa dikembalikan. (y/N) ')).trim().toLowerCase()
+    rl.close()
+    if (ans === 'y') {
+      const del = db.transaction(() => {
+        db.prepare('delete from episodes_fts where rowid = ?').run(r.id)
+        db.prepare('delete from episodes where id = ?').run(r.id)
+      })
+      del()
+      console.log('Kartu dihapus.')
+    } else {
+      console.log('Dibatalkan.')
     }
   }
 } else if (cmd === 'addfact') {

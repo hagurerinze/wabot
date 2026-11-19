@@ -206,6 +206,8 @@ After you change the code or `.env`, use `botrestart`.
 - `botmem chat <part of id>` - show the last messages of one chat
 - `botmem addfact`, `editfact`, `delfact`, `delperson` - add, change, or delete facts
 - `botmem editsummary <part of id>` - change a summary in a text editor
+- `botmem episodes [part of id]`, `botmem episode <number>` - list the memory cards, or show one card
+- `botmem editepisode <number>`, `botmem delepisode <number>` - change a memory card in a text editor, or delete it
 - `botmem renumber` - set the fact ids to start from 1 again
 - `botmem notes` - read Yurishy's own notebook and its versions
 - `botmem editnotes`, `revert` - change the notebook or go back to an old version
