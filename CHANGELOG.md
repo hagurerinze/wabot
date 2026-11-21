@@ -5,5 +5,5 @@
 - Persona is now set by the owner locally, so it can be short and simple.
 
 ### Notes
-- Create your own persona file before running the bot.
-- Other changes in this version: (isi sendiri)
+- `persona.md` is not in the repo anymore. It stays on the owner's machine.
+- To make your own persona, copy `persona.example.md` to `persona.md`, then edit it.
