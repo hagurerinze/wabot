@@ -167,6 +167,7 @@ async function compactChat(key, person) {
 let outboxTimer = null
 let groupsTimer = null
 
+process.on('unhandledRejection', (e) => console.log('Error (diabaikan):', e?.message || e))
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState('auth')
   const { version } = await fetchLatestBaileysVersion()
@@ -180,8 +181,12 @@ async function start() {
   // Login pakai pairing code (tanpa QR)
   if (!sock.authState.creds.registered) {
     setTimeout(async () => {
-      const code = await sock.requestPairingCode(PHONE)
-      console.log('Kode pairing:', code)
+      try {
+        const code = await sock.requestPairingCode(PHONE)
+        console.log('Kode pairing:', code)
+      } catch (e) {
+        console.log('Gagal minta kode pairing:', e.message)
+      }
     }, 3000)
   }
 
