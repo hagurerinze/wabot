@@ -1,3 +1,4 @@
+export const BOT_NAME = process.env.BOT_NAME || 'Yurishy'
 import Database from 'better-sqlite3'
 
 const db = new Database('bot.db')

@@ -1,3 +1,4 @@
+const BOT_NAME = process.env.BOT_NAME || 'Yurishy'
 import Database from 'better-sqlite3'
 
 const db = new Database('bot.db')
@@ -19,7 +20,7 @@ if (!arg) {
     .reverse()
   if (!rows.length) console.log('Tidak ada chat yang cocok.')
   for (const r of rows) {
-    const who = r.role === 'user' ? 'user' : 'Yurishy'
+    const who = r.role === 'user' ? 'user' : BOT_NAME
     console.log(`[${new Date(r.ts).toLocaleTimeString('id-ID')}] ${who}: ${r.content}`)
   }
 }

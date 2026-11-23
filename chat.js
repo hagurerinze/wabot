@@ -1,10 +1,11 @@
+import { BOT_NAME } from './db.js'
 import readline from 'readline'
 import { askGemini } from './ai.js'
 import { saveMessage, getHistory, clearHistory } from './db.js'
 
 const CHAT = 'terminal'
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-console.log('Chat dengan Yurishy. /reset hapus riwayat, /exit keluar.')
+console.log('Chat dengan ' + BOT_NAME + '. /reset hapus riwayat, /exit keluar.')
 
 function loop() {
   rl.question('kamu> ', async (line) => {
@@ -19,7 +20,7 @@ function loop() {
         const answer = await askGemini(history, undefined, 'Hagure (pemilikmu)')
         saveMessage(CHAT, 'user', q)
         saveMessage(CHAT, 'model', answer)
-        console.log('\nYurishy> ' + answer + '\n')
+        console.log('\n' + BOT_NAME + '> ' + answer + '\n')
       } catch (e) {
         console.error('error:', e.message)
       }

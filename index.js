@@ -1,3 +1,4 @@
+import { BOT_NAME } from './db.js'
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -510,8 +511,8 @@ async function start() {
         if (lintas) console.log('reply lintas orang:', rec.to_name, '<-', sender)
         const qctx = quotedText
           ? lintas
-            ? `[membalas pesan Yurishy yang tadinya jawaban untuk ${rec.to_name}${rec.question ? ` (soal: "${rec.question}")` : ''}, bukan untuk orang yang sedang bicara sekarang: "${quotedText.slice(0, 300)}"] `
-            : `[membalas pesan ${isReplyToBot ? 'Yurishy' : 'orang lain'}: "${quotedText.slice(0, 300)}"] `
+            ? `[membalas pesan ${BOT_NAME} yang tadinya jawaban untuk ${rec.to_name}${rec.question ? ` (soal: "${rec.question}")` : ''}, bukan untuk orang yang sedang bicara sekarang: "${quotedText.slice(0, 300)}"] `
+            : `[membalas pesan ${isReplyToBot ? BOT_NAME : 'orang lain'}: "${quotedText.slice(0, 300)}"] `
           : ''
         const stored = isSticker ? `[stiker] ${qctx}`.trim() : image ? `[gambar] ${qctx}${q}` : `${qctx}${q}`
         const history = [...getHistory(key, 9), { role: 'user', content: stored }]
@@ -529,7 +530,7 @@ async function start() {
             links = got.map((r, i) => (r.ok ? { url: r.url, text: r.text } : { url: urls[i], fail: r.why }))
             console.log('baca link:', got.map((r) => (r.ok ? 'ok' : r.why)).join(', '))
           } else {
-            links = urls.map((u) => ({ url: u, fail: 'Yurishy belum diizinkan membuka link untuk orang ini, atau jatahnya habis' }))
+            links = urls.map((u) => ({ url: u, fail: BOT_NAME + ' belum diizinkan membuka link untuk orang ini, atau jatahnya habis' }))
           }
         }
         const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, memories, links }]

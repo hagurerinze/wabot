@@ -1,3 +1,4 @@
+import { BOT_NAME } from './db.js'
 // Kirim pesan ke grup lewat Yurishy, diketik apa adanya (tanpa AI)
 import readline from 'readline'
 import { listGroups, queueOutbox } from './db.js'
@@ -10,7 +11,7 @@ if (groups.length === 0) {
   process.exit(1)
 }
 if (args.length === 0) {
-  console.log('Grup yang dikenal Yurishy:')
+  console.log('Grup yang dikenal ' + BOT_NAME + ':')
   groups.forEach((g, i) => console.log(`${i + 1}. ${g.name}`))
   console.log('\nPakai: botsay <nomor atau potongan nama> [pesan]')
   console.log('Kalau pesan dikosongkan, kamu akan diminta mengetiknya.')
