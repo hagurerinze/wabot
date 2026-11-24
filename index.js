@@ -16,8 +16,12 @@ import { saveMessage, getHistory, clearHistory, countMessages, getOldest, delete
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
+import { getActivity, takeScreenshot } from './activity.js'
 import { readLink, findLinks } from './webfetch.js'
 const SELF_WORD = /(?:(?:\b(?:suhu|panas|baterai|batre|baterei|battery|charger|cpu|ram|uptime|kondisi)\b)|\b(?:hdd|ssd|disk|harddisk|hard disk)\b|storage|penyimpanan|ruang (?:kosong|disk|penyimpanan))|\b(?:cpu|ram|prosesor|processor|spek|spesifikasi)\b/i
+const ACTIVITY_WORD = /\b(?:ngapain|ngapa|sibuk|ngerjain|nugas|lagi\s+(?:apa|buka|pakai|pake|kerja|online|aktif|main|nonton))\b/i
+const ACTIVITY_ON = (process.env.ACTIVITY_SHARE || 'on').toLowerCase() !== 'off'
+let lastSs = 0
 const WEATHER_WORD = /\b(?:cuaca|hujan|gerimis|mendung|payung|weather|suhu|jemur)\b/i
 
 // ---- todo lewat obrolan biasa ----
@@ -435,6 +439,18 @@ async function start() {
         fs.rmSync(inFile, { force: true })
         fs.rmSync(outFile, { force: true })
       }
+    } else if (/^!ss(\s|$)/i.test(text)) {
+      if (!isOwner) return reply('Command ini khusus owner.')
+      const tungguSs = 15000 - (Date.now() - lastSs)
+      if (tungguSs > 0) return reply(`Tunggu ${Math.ceil(tungguSs / 1000)} detik lagi.`)
+      lastSs = Date.now()
+      try {
+        const shot = takeScreenshot()
+        await sock.sendMessage(jid, { image: shot, caption: 'Layar laptop sekarang' }, { quoted: m })
+      } catch (e) {
+        console.error('screenshot:', e.message)
+        await reply('Gagal mengambil screenshot, layar tidak bisa diakses.')
+      }
     } else if (text.startsWith('!img ')) {
       if (!isOwner) return reply('Fitur ini sementara khusus owner.')
       const prompt = text.slice(5).trim()
@@ -473,6 +489,8 @@ async function start() {
       const todoMarks = []
       let weather = ''
       const selfstat = SELF_WORD.test(q) ? getSelfStatus() : ''
+      const activity = ACTIVITY_ON && ACTIVITY_WORD.test(q) ? getActivity() : ''
+      if (activity) console.log('aktivitas:', activity)
       const curSum = getSummary(key)
       const memories = findEpisodes(key, q, 4)
         .filter((e) => e.text !== curSum)
@@ -533,7 +551,7 @@ async function start() {
             links = urls.map((u) => ({ url: u, fail: BOT_NAME + ' belum diizinkan membuka link untuk orang ini, atau jatahnya habis' }))
           }
         }
-        const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, memories, links }]
+        const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, activity, memories, links }]
         let answer
         try {
           answer = await askGemini(history, image, ...askArgs)
