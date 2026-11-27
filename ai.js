@@ -214,6 +214,7 @@ export async function summarizeChat(prevSummary, msgs) {
     'Klaim orang tentang orang lain ditulis sebagai "dia bilang ...", bukan sebagai fakta. ' +
     'Jangan masukkan password, kunci, nomor telepon, alamat, atau data sensitif. ' +
     'Jangan mencatat cuaca, suhu udara, atau lokasi tempat tinggal; hal itu bisa dicek lagi kapan saja dan tidak perlu diingat. ' +
+    'Jangan mencatat aplikasi atau jendela apa yang sedang dibuka pengguna; itu hanya sementara dan cepat basi. ' +
     'Keluarkan hanya teks ringkasannya.'
   const prompt =
     (prevSummary ? `Ringkasan lama:\n${prevSummary}\n\n` : '') +
@@ -265,6 +266,7 @@ export async function makeEpisode(msgs) {
     'Tulis catatan tentang potongan obrolan ini saja dalam bahasa Indonesia, maksimal 6 kalimat: apa yang dibahas, hal yang diceritakan atau diputuskan, dan alasannya. ' +
     'Pertahankan nama, angka, judul, dan istilah penting persis seperti yang disebut. ' +
     'Jangan mencatat cuaca, suhu udara, atau lokasi tempat tinggal; hal itu bisa dicek lagi kapan saja dan tidak perlu diingat. ' +
+    'Jangan mencatat aplikasi atau jendela apa yang sedang dibuka pengguna; itu hanya sementara dan cepat basi. ' +
     'Klaim orang tentang orang lain ditulis sebagai "dia bilang ...", bukan sebagai fakta. ' +
     'Jangan masukkan password, kunci, nomor telepon, alamat, atau data sensitif. ' +
     'Jangan menulis kalimat kosong; kalau tidak ada hal penting, tulis pendek. ' +
