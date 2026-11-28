@@ -1,4 +1,6 @@
-const BOT_NAME = process.env.BOT_NAME || 'Yurishy'
+try { process.loadEnvFile(new URL('./.env', import.meta.url)) } catch {}
+const BOT_NAME = process.env.BOT_NAME
+if (BOT_NAME === undefined) throw new Error('BOT_NAME belum diisi di .env')
 import Database from 'better-sqlite3'
 
 const db = new Database('bot.db')
