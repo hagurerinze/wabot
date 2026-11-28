@@ -425,3 +425,65 @@ export function getNames(jids) {
   }
   return out
 }
+
+// catatan grup: 15 pesan terakhir per grup, dan potongan @all
+db.exec(`
+  CREATE TABLE IF NOT EXISTS group_recent (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grup TEXT NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    ts INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_gr_grup ON group_recent(grup, id);
+  CREATE TABLE IF NOT EXISTS group_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grup TEXT NOT NULL,
+    caller TEXT NOT NULL,
+    context TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    ts INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_gt_grup ON group_tags(grup, id);
+  CREATE TABLE IF NOT EXISTS group_tag_msgs (
+    msg_id TEXT PRIMARY KEY,
+    tag_id INTEGER NOT NULL
+  );
+`)
+const grInsert = db.prepare('INSERT INTO group_recent (grup, name, text, ts) VALUES (?, ?, ?, ?)')
+const grPrune = db.prepare(
+  'DELETE FROM group_recent WHERE grup = ? AND id NOT IN (SELECT id FROM group_recent WHERE grup = ? ORDER BY id DESC LIMIT 15)'
+)
+const grList = db.prepare(
+  'SELECT name, text FROM (SELECT id, name, text FROM group_recent WHERE grup = ? ORDER BY id DESC LIMIT ?) ORDER BY id ASC'
+)
+export function recordGroupMsg(grup, name, text) {
+  grInsert.run(grup, name, text, Date.now())
+  grPrune.run(grup, grup)
+}
+export function getGroupRecent(grup, n = 15) {
+  return grList.all(grup, n)
+}
+
+const gtInsert = db.prepare('INSERT INTO group_tags (grup, caller, context, answer, ts) VALUES (?, ?, ?, ?, ?)')
+const gtMsg = db.prepare('INSERT OR REPLACE INTO group_tag_msgs (msg_id, tag_id) VALUES (?, ?)')
+const gtPrune = db.prepare(
+  'DELETE FROM group_tags WHERE grup = ? AND id NOT IN (SELECT id FROM group_tags WHERE grup = ? ORDER BY id DESC LIMIT 30)'
+)
+const gtOrphans = db.prepare('DELETE FROM group_tag_msgs WHERE tag_id NOT IN (SELECT id FROM group_tags)')
+const gtLast = db.prepare('SELECT caller, context, answer, ts FROM group_tags WHERE grup = ? ORDER BY id DESC LIMIT ?')
+const gtByMsg = db.prepare(
+  'SELECT t.caller, t.context, t.answer FROM group_tag_msgs g JOIN group_tags t ON t.id = g.tag_id WHERE g.msg_id = ?'
+)
+export function saveGroupTag(grup, caller, context, answer, msgIds) {
+  const r = gtInsert.run(grup, caller, context, answer, Date.now())
+  for (const id of msgIds || []) gtMsg.run(String(id), r.lastInsertRowid)
+  gtPrune.run(grup, grup)
+  gtOrphans.run()
+}
+export function getGroupTags(grup, n = 3) {
+  return gtLast.all(grup, n).reverse()
+}
+export function findGroupTagByMsg(msgId) {
+  return gtByMsg.get(String(msgId)) || null
+}

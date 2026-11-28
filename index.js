@@ -12,7 +12,7 @@ import fs from 'fs'
 import path from 'path'
 import { execSync, execFile } from 'child_process'
 import { promisify } from 'util'
-import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent, saveGroups, pendingOutbox, markOutbox, saveName, getNames, TODO_MAX } from './db.js'
+import { saveMessage, getHistory, clearHistory, countMessages, getOldest, deleteMessages, getSummary, saveSummary, getFacts, addFacts, deleteFacts, getSelfNotes, saveSelfNotes, addProposals, getProposalDecisions, addTodos, listTodos, finishTodos, removeTodos, clearTodos, addEpisode, findEpisodes, saveSent, findSent, saveGroups, pendingOutbox, markOutbox, saveName, getNames, TODO_MAX, recordGroupMsg, getGroupRecent, saveGroupTag, getGroupTags, findGroupTagByMsg } from './db.js'
 import { askGemini, summarizeChat, extractFacts, reflectOnChat, makeEpisode } from './ai.js'
 import { getWeather } from './weather.js'
 import { getSelfStatus } from './selfstat.js'
@@ -333,6 +333,47 @@ async function start() {
       return ids
     }
 
+    // catatan grup (15 pesan terakhir per grup) dan balasan untuk @all
+    if (jid.endsWith('@g.us') && process.env.GROUP_NOTES === 'on') {
+      const plain = text.replace(/^!ai\s+/, '').trim()
+      const callerName = isOwner ? 'Hagure' : cleanName(m.pushName) || 'seseorang'
+      if (plain && plain.startsWith('!') === false) {
+        try {
+          recordGroupMsg(jid, callerName, plain.slice(0, 300))
+        } catch (e) {
+          console.error('catat pesan grup:', e.message)
+        }
+      }
+      if (ctx?.nonJidMentions && /@all\b/i.test(text) && isMentioned === false && isReplyToBot === false) {
+        if (allow(`all:${jid}`, 1, 120000)) {
+          try {
+            try { await sock.sendPresenceUpdate('composing', jid) } catch {}
+            const lines = getGroupRecent(jid, 15).map((r) => `${r.name}: ${r.text}`).join('\n')
+            const past = getGroupTags(jid, 3)
+              .map((t) => `- ${t.caller} menge-tag semua, kamu menjawab: ${t.answer}`)
+              .join('\n')
+            const groupContext =
+              `Obrolan terakhir di grup (yang paling bawah paling baru):\n${lines}` +
+              (past ? `\n\nTag @all sebelumnya di grup ini:\n${past}` : '')
+            const prompt = `${callerName} baru saja menge-tag semua anggota grup dengan @all. Tanggapi dengan gayamu sendiri, singkat, seperti anggota grup yang ikut nimbrung.`
+            const answer = await askGemini([{ role: 'user', content: prompt }], undefined, callerName, '', [], getSelfNotes().body, { groupContext })
+            if (answer) {
+              const sentIds = await replyMulti(answer)
+              try {
+                saveSent(sentIds, jid, sender, callerName, '@all')
+                saveGroupTag(jid, callerName, lines, answer, sentIds)
+                recordGroupMsg(jid, BOT_NAME, answer.replace(/\s*\[next\]\s*/gi, ' ').trim().slice(0, 300))
+              } catch (e) {
+                console.error('catat tag @all:', e.message)
+              }
+            }
+          } catch (e) {
+            console.error('balas @all:', e.message)
+          }
+        }
+        return
+      }
+    }
     if (text === '!ping') {
       await reply('pong')
     } else if (text === '!help') {
@@ -525,6 +566,10 @@ async function start() {
           if (sbuf.length <= 1024 * 1024) image = { mime: 'image/webp', data: sbuf.toString('base64') }
         }
         const rec = isReplyToBot && ctx?.stanzaId && jid.endsWith('@g.us') ? findSent(ctx.stanzaId) : null
+        const tagCtx = isReplyToBot && ctx?.stanzaId && jid.endsWith('@g.us') ? findGroupTagByMsg(ctx.stanzaId) : null
+        const groupContext = tagCtx
+          ? `Kamu tadi membalas tag @all dari ${tagCtx.caller}. Obrolan grup sebelum tag itu:\n${tagCtx.context}\n\nBalasanmu waktu itu: ${tagCtx.answer}`
+          : undefined
         const lintas = Boolean(rec) && rec.to_sender !== sender
         if (lintas) console.log('reply lintas orang:', rec.to_name, '<-', sender)
         const qctx = quotedText
@@ -551,7 +596,7 @@ async function start() {
             links = urls.map((u) => ({ url: u, fail: BOT_NAME + ' belum diizinkan membuka link untuk orang ini, atau jatahnya habis' }))
           }
         }
-        const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, activity, memories, links }]
+        const askArgs = [who, getSummary(key), getFacts(sender), getSelfNotes().body, { todo: todoMode, marks: todoMarks, weather, selfstat, activity, memories, links, groupContext }]
         let answer
         try {
           answer = await askGemini(history, image, ...askArgs)
@@ -566,6 +611,9 @@ async function start() {
         saveMessage(key, 'user', stored)
         saveMessage(key, 'model', String(answer || '').replace(/\s*\[next\]\s*/gi, '\n\n').trim() || '(todo diproses)')
         const sentIds = await replyMulti(finalText)
+        if (jid.endsWith('@g.us')) {
+          try { recordGroupMsg(jid, BOT_NAME, String(answer || '').replace(/\s*\[next\]\s*/gi, ' ').trim().slice(0, 300)) } catch {}
+        }
         if (jid.endsWith('@g.us')) {
           try {
             saveSent(sentIds, jid, sender, String(who).replace(/\s*\(.*?\)\s*$/, '').trim() || 'seseorang', String(q).slice(0, 120))
